@@ -264,6 +264,7 @@ export class UI {
       { label: 'Buy Circuit', separator: false },
       { label: 'Buy Server', separator: false },
       { label: 'Buy Network Equipment', separator: true },
+      { label: 'Receiving Dock', separator: false },
       { label: 'Cable Management', separator: false }
     ];
     
@@ -290,6 +291,12 @@ export class UI {
           this.toggleRackPlacementMode();
         } else if (item.label === 'Buy Circuit') {
           this.showCircuitPurchaseUI();
+        } else if (item.label === 'Buy Server') {
+          this.showServerPurchaseUI();
+        } else if (item.label === 'Buy Network Equipment') {
+          this.showNetworkEquipmentPurchaseUI();
+        } else if (item.label === 'Receiving Dock') {
+          this.showReceivingDockUI();
         } else if (item.label === 'Cable Management') {
           this.game.toggleCableMode(true);
         }
@@ -390,667 +397,6 @@ export class UI {
   // Show View menu
   showViewMenu(menuItem) {
     this.closeAllMenus();
-    
-    const menu = document.createElement('div');
-    menu.className = 'win2k-dropdown-menu';
-    menu.style.position = 'absolute';
-    menu.style.top = '24px';
-    menu.style.left = menuItem.getBoundingClientRect().left + 'px';
-    menu.style.backgroundColor = '#d4d0c8';
-    menu.style.border = '1px solid #808080';
-    menu.style.boxShadow = '2px 2px 4px rgba(0,0,0,0.2)';
-    menu.style.zIndex = '101';
-    menu.style.minWidth = '150px';
-    
-    // Add menu items
-    const menuItems = [
-      { label: 'Details Panel', checked: this.detailsPanel && this.detailsPanel.style.display !== 'none', separator: true },
-      { label: 'Cascade Windows', separator: false },
-      { label: 'Tile Windows', separator: false }
-    ];
-    
-    menuItems.forEach(item => {
-      const itemElement = document.createElement('div');
-      itemElement.style.padding = '4px 20px';
-      itemElement.style.cursor = 'pointer';
-      itemElement.style.display = 'flex';
-      itemElement.style.alignItems = 'center';
-      
-      // Add checkmark for toggle items
-      if (item.hasOwnProperty('checked')) {
-        const checkBox = document.createElement('div');
-        checkBox.style.width = '12px';
-        checkBox.style.height = '12px';
-        checkBox.style.border = '1px solid #808080';
-        checkBox.style.marginRight = '8px';
-        checkBox.style.backgroundColor = item.checked ? '#ffffff' : '#d4d0c8';
-        checkBox.style.position = 'relative';
-        
-        if (item.checked) {
-          // Create checkmark
-          const checkmark = document.createElement('div');
-          checkmark.innerHTML = '✓';
-          checkmark.style.position = 'absolute';
-          checkmark.style.top = '-2px';
-          checkmark.style.left = '1px';
-          checkmark.style.fontSize = '11px';
-          checkmark.style.color = '#000000';
-          checkBox.appendChild(checkmark);
-        }
-        
-        itemElement.appendChild(checkBox);
-      } else {
-        // Add some padding where the checkbox would be
-        itemElement.style.paddingLeft = '40px';
-      }
-      
-      const label = document.createElement('span');
-      label.textContent = item.label;
-      itemElement.appendChild(label);
-      
-      // Add hover effect
-      itemElement.addEventListener('mouseover', () => {
-        itemElement.style.backgroundColor = '#0000a5';
-        itemElement.style.color = '#ffffff';
-      });
-      
-      itemElement.addEventListener('mouseout', () => {
-        itemElement.style.backgroundColor = '';
-        itemElement.style.color = '#000000';
-      });
-      
-      // Add click handlers
-      itemElement.addEventListener('click', () => {
-        if (item.label === 'Details Panel') {
-          this.togglePanel(this.detailsPanel);
-        } else if (item.label === 'Cascade Windows') {
-          this.cascadeWindows();
-        } else if (item.label === 'Tile Windows') {
-          this.tileWindows();
-        }
-        
-        this.closeAllMenus();
-      });
-      
-      menu.appendChild(itemElement);
-      
-      // Add separator if needed
-      if (item.separator) {
-        const separator = document.createElement('div');
-        separator.style.height = '1px';
-        separator.style.backgroundColor = '#808080';
-        separator.style.margin = '3px 2px';
-        menu.appendChild(separator);
-      }
-    });
-    
-    document.body.appendChild(menu);
-    this.activeMenu = menu;
-    
-    // Close menu when clicking elsewhere
-    setTimeout(() => {
-      document.addEventListener('click', this.closeAllMenus.bind(this), { once: true });
-    }, 0);
-  }
-  
-  // Update UI elements
-  update() {
-    // Update menu bar stats
-    if (this.game.datacenter) {
-      this.updateMenuStats();
-    }
-    
-    // Update details panel if there's a selected object and panel exists
-    if (this.game.selectedObject && this.detailsPanel) {
-      const object = this.game.selectedObject;
-      this.detailsPanel.style.display = 'block';
-      
-      // Make the panel draggable if it isn't already
-      const titleBar = this.detailsPanel.querySelector('.win2k-titlebar');
-      if (titleBar && !this.detailsPanel.dataset.draggable) {
-        this.makePanelDraggable(this.detailsPanel, titleBar);
-        this.detailsPanel.dataset.draggable = 'true';
-      }
-      
-      if (object.userData.type === 'rack') {
-        // Find the rack
-        const rack = this.game.datacenter.racks.find(r => 
-          r.container.uuid === object.parent.uuid
-        );
-        
-        if (rack) {
-          // Update details panel content for rack
-          this.updateRackDetails(rack);
-        }
-      } else if (object.userData.type === 'server') {
-        // Find the server
-        let foundServer = null;
-        for (const rack of this.game.datacenter.racks) {
-          const server = rack.servers.find(s => s.id === object.userData.serverId);
-          if (server) {
-            foundServer = server;
-            break;
-          }
-        }
-        
-        if (foundServer) {
-          // Update details panel content for server
-          this.updateServerDetails(foundServer);
-        }
-      }
-    } else if (this.detailsPanel) {
-      this.detailsPanel.style.display = 'none';
-    }
-    
-    // Schedule next update
-    requestAnimationFrame(this.update.bind(this));
-  }
-  
-  // Update rack details panel
-  updateRackDetails(rack) {
-    // Add Windows 2000 style content to details panel
-    const titleBar = document.createElement('div');
-    titleBar.className = 'win2k-titlebar';
-    titleBar.style.backgroundColor = '#0000a5'; // Windows 2000 blue
-    titleBar.style.color = '#ffffff';
-    titleBar.style.padding = '2px 5px';
-    titleBar.style.margin = '-8px -8px 8px -8px'; // Extend to edges
-    titleBar.style.fontWeight = 'bold';
-    titleBar.style.fontSize = '12px';
-    titleBar.textContent = 'Rack Details';
-    
-    // Clear panel first
-    this.detailsPanel.innerHTML = '';
-    this.detailsPanel.appendChild(titleBar);
-    
-    // Create content
-    const content = document.createElement('div');
-    content.innerHTML = `
-      <table style="width: 100%; border-collapse: collapse;">
-        <tr>
-          <td style="padding: 2px;">Position:</td>
-          <td style="padding: 2px; text-align: right;">(${rack.container.userData.gridX}, ${rack.container.userData.gridZ})</td>
-        </tr>
-        <tr>
-          <td style="padding: 2px;">Servers:</td>
-          <td style="padding: 2px; text-align: right;">${rack.servers.length}</td>
-        </tr>
-        <tr>
-          <td style="padding: 2px;">Used Space:</td>
-          <td style="padding: 2px; text-align: right;">${rack.servers.reduce((total, server) => total + server.unitSize, 0)}U / ${rack.rackHeightUnits}U</td>
-        </tr>
-      </table>
-    `;
-    
-    this.detailsPanel.appendChild(content);
-    
-    // Create Win2000 button for View Rack
-    const buttonContainer = document.createElement('div');
-    buttonContainer.style.marginTop = '10px';
-    buttonContainer.style.textAlign = 'center';
-    
-    const viewRackBtn = this.createButton('View Rack', () => {
-      this.showRackView(rack);
-    });
-    
-    buttonContainer.appendChild(viewRackBtn);
-    this.detailsPanel.appendChild(buttonContainer);
-  }
-  
-  // Update server details panel
-  updateServerDetails(server) {
-    // Add Windows 2000 style content to details panel
-    const titleBar = document.createElement('div');
-    titleBar.className = 'win2k-titlebar';
-    titleBar.style.backgroundColor = '#0000a5'; // Windows 2000 blue
-    titleBar.style.color = '#ffffff';
-    titleBar.style.padding = '2px 5px';
-    titleBar.style.margin = '-8px -8px 8px -8px'; // Extend to edges
-    titleBar.style.fontWeight = 'bold';
-    titleBar.style.fontSize = '12px';
-    titleBar.textContent = 'Server Details';
-    
-    // Clear panel first
-    this.detailsPanel.innerHTML = '';
-    this.detailsPanel.appendChild(titleBar);
-    
-    // Create content
-    const content = document.createElement('div');
-    content.innerHTML = `
-      <table style="width: 100%; border-collapse: collapse;">
-        <tr>
-          <td style="padding: 2px;">ID:</td>
-          <td style="padding: 2px; text-align: right;">${server.id}</td>
-        </tr>
-        <tr>
-          <td style="padding: 2px;">Size:</td>
-          <td style="padding: 2px; text-align: right;">${server.unitSize}U</td>
-        </tr>
-        <tr>
-          <td style="padding: 2px;">CPU:</td>
-          <td style="padding: 2px; text-align: right;">${server.specs.cpu.cores} cores @ ${server.specs.cpu.speed} GHz</td>
-        </tr>
-        <tr>
-          <td style="padding: 2px;">RAM:</td>
-          <td style="padding: 2px; text-align: right;">${server.specs.ram} GB</td>
-        </tr>
-        <tr>
-          <td style="padding: 2px;">Storage:</td>
-          <td style="padding: 2px; text-align: right;">${server.specs.storage.map(s => `${s.size} GB ${s.type}`).join(', ')}</td>
-        </tr>
-        <tr>
-          <td style="padding: 2px;">Network:</td>
-          <td style="padding: 2px; text-align: right;">${server.specs.networkCards.map(n => `${n.speed} Gbps`).join(', ')}</td>
-        </tr>
-        <tr>
-          <td style="padding: 2px;">Power:</td>
-          <td style="padding: 2px; text-align: right;">${server.powerConsumption} W</td>
-        </tr>
-        <tr>
-          <td style="padding: 2px;">Temperature:</td>
-          <td style="padding: 2px; text-align: right;">${server.temperature.toFixed(1)}°C</td>
-        </tr>
-        <tr>
-          <td style="padding: 2px;">Utilization:</td>
-          <td style="padding: 2px; text-align: right;">${server.utilization.toFixed(1)}%</td>
-        </tr>
-        <tr>
-          <td style="padding: 2px;">Revenue:</td>
-          <td style="padding: 2px; text-align: right;">$${server.revenue}/hour</td>
-        </tr>
-      </table>
-    `;
-    
-    this.detailsPanel.appendChild(content);
-    
-    // Create Win2000 button for Upgrade
-    const buttonContainer = document.createElement('div');
-    buttonContainer.style.marginTop = '10px';
-    buttonContainer.style.textAlign = 'center';
-    
-    const upgradeBtn = this.createButton('Upgrade', () => {
-      console.log('Upgrade server');
-      // Show upgrade options
-    });
-    
-    buttonContainer.appendChild(upgradeBtn);
-    this.detailsPanel.appendChild(buttonContainer);
-  }
-
-  // Make a panel draggable and closable
-  makePanelDraggable(panel, titleBar) {
-    // Track dragging state
-    let isDragging = false;
-    let offsetX = 0;
-    let offsetY = 0;
-    
-    // Add position tracking if not already present
-    if (!panel.dataset.posX) {
-      panel.dataset.posX = panel.style.left || '20px';
-      panel.dataset.posY = panel.style.top || '20px';
-    }
-    
-    // Create close button if not exists
-    if (!titleBar.querySelector('.win2k-close-btn')) {
-      const closeBtn = document.createElement('div');
-      closeBtn.className = 'win2k-close-btn';
-      closeBtn.innerHTML = 'X';
-      closeBtn.style.width = '16px';
-      closeBtn.style.height = '16px';
-      closeBtn.style.padding = '0';
-      closeBtn.style.margin = '0';
-      closeBtn.style.display = 'flex';
-      closeBtn.style.alignItems = 'center';
-      closeBtn.style.justifyContent = 'center';
-      closeBtn.style.backgroundColor = '#c0c0c0';
-      closeBtn.style.color = '#000000';
-      closeBtn.style.border = '2px solid';
-      closeBtn.style.borderColor = '#ffffff #808080 #808080 #ffffff';
-      closeBtn.style.fontSize = '10px';
-      closeBtn.style.fontWeight = 'bold';
-      closeBtn.style.cursor = 'pointer';
-      closeBtn.style.marginLeft = 'auto';
-      
-      closeBtn.addEventListener('mousedown', (e) => {
-        e.stopPropagation(); // Prevent dragging when clicking close button
-      });
-      
-      closeBtn.addEventListener('click', () => {
-        panel.style.display = 'none';
-      });
-      
-      titleBar.style.display = 'flex';
-      titleBar.style.alignItems = 'center';
-      titleBar.appendChild(closeBtn);
-    }
-    
-    // Make cursor indicate draggable
-    titleBar.style.cursor = 'move';
-    
-    // Add mouse down event for dragging
-    titleBar.addEventListener('mousedown', (e) => {
-      isDragging = true;
-      
-      // Calculate the offset between mouse position and panel top-left corner
-      const rect = panel.getBoundingClientRect();
-      offsetX = e.clientX - rect.left;
-      offsetY = e.clientY - rect.top;
-      
-      // Bring panel to front (increase z-index)
-      this.bringToFront(panel);
-      
-      // Prevent text selection during drag
-      e.preventDefault();
-    });
-    
-    // Add mouse move and up events to document
-    document.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
-      
-      // Calculate new position
-      const x = e.clientX - offsetX;
-      const y = e.clientY - offsetY;
-      
-      // Set new position
-      panel.style.left = `${x}px`;
-      panel.style.top = `${y}px`;
-      
-      // Update stored position
-      panel.dataset.posX = `${x}px`;
-      panel.dataset.posY = `${y}px`;
-    });
-    
-    document.addEventListener('mouseup', () => {
-      isDragging = false;
-    });
-    
-    // Add to our tracked panels
-    if (!this.draggablePanels) {
-      this.draggablePanels = [];
-    }
-    this.draggablePanels.push(panel);
-    
-    return panel;
-  }
-  
-  // Toggle panel visibility
-  togglePanel(panel) {
-    if (panel.style.display === 'none') {
-      panel.style.display = panel.dataset.defaultDisplay || 'block';
-      
-      // Restore saved position if available
-      if (panel.dataset.posX) {
-        panel.style.left = panel.dataset.posX;
-        panel.style.top = panel.dataset.posY;
-      }
-      
-      // Bring to front
-      this.bringToFront(panel);
-    } else {
-      // Save the default display type before hiding
-      panel.dataset.defaultDisplay = panel.style.display;
-      panel.style.display = 'none';
-    }
-  }
-  
-  // Bring a panel to the front
-  bringToFront(panel) {
-    // Find the highest z-index
-    let maxZ = 100; // Base z-index
-    document.querySelectorAll('.win2k-panel').forEach(p => {
-      const zIndex = parseInt(p.style.zIndex || '100');
-      if (zIndex > maxZ) maxZ = zIndex;
-    });
-    
-    // Set this panel's z-index higher
-    panel.style.zIndex = (maxZ + 1).toString();
-  }
-  
-  // Arrange windows in cascade
-  cascadeWindows() {
-    if (!this.draggablePanels || this.draggablePanels.length === 0) return;
-    
-    let offsetX = 20;
-    let offsetY = 40; // Start below menu bar
-    
-    this.draggablePanels.forEach((panel, index) => {
-      if (panel.style.display !== 'none') {
-        panel.style.left = `${offsetX + index * 30}px`;
-        panel.style.top = `${offsetY + index * 30}px`;
-        
-        // Update stored position
-        panel.dataset.posX = panel.style.left;
-        panel.dataset.posY = panel.style.top;
-        
-        // Set z-index based on order
-        panel.style.zIndex = (100 + index).toString();
-      }
-    });
-  }
-  
-  // Arrange windows in tiles
-  tileWindows() {
-    if (!this.draggablePanels || this.draggablePanels.length === 0) return;
-    
-    // Filter visible panels
-    const visiblePanels = this.draggablePanels.filter(p => p.style.display !== 'none');
-    if (visiblePanels.length === 0) return;
-    
-    // Get window dimensions
-    const windowWidth = window.innerWidth;
-    const windowHeight = window.innerHeight;
-    
-    // Calculate tile layout
-    const cols = Math.ceil(Math.sqrt(visiblePanels.length));
-    const rows = Math.ceil(visiblePanels.length / cols);
-    
-    // Calculate tile dimensions
-    const tileWidth = windowWidth / cols;
-    const tileHeight = (windowHeight - 40) / rows; // Account for menu bar
-    
-    // Position each panel
-    visiblePanels.forEach((panel, index) => {
-      const row = Math.floor(index / cols);
-      const col = index % cols;
-      
-      panel.style.left = `${col * tileWidth}px`;
-      panel.style.top = `${40 + row * tileHeight}px`; // 40px for menu bar
-      panel.style.width = `${tileWidth - 20}px`; // Subtract padding
-      panel.style.height = `${tileHeight - 20}px`; // Subtract padding
-      
-      // Update stored position
-      panel.dataset.posX = panel.style.left;
-      panel.dataset.posY = panel.style.top;
-      
-      // Set z-index based on order
-      panel.style.zIndex = (100 + index).toString();
-    });
-  }
-  
-  // Show UI for purchasing a circuit
-  showCircuitPurchaseUI() {
-    // Create modal content container with Windows 2000 styling
-    const modalContent = document.createElement('div');
-    modalContent.className = 'modal-content';
-    
-    // Add Windows 2000 style title bar
-    const titleBar = document.createElement('div');
-    titleBar.style.backgroundColor = '#0000a5'; // Windows 2000 blue
-    titleBar.style.color = '#ffffff';
-    titleBar.style.padding = '3px 5px';
-    titleBar.style.margin = '-2px -2px 5px -2px'; // Extend to edges
-    titleBar.style.fontWeight = 'bold';
-    titleBar.style.fontSize = '12px';
-    titleBar.style.display = 'flex';
-    titleBar.style.justifyContent = 'space-between';
-    titleBar.style.alignItems = 'center';
-    
-    // Add title text
-    const titleText = document.createElement('span');
-    titleText.textContent = 'Purchase Internet Circuit';
-    titleBar.appendChild(titleText);
-    
-    // Add close button (Windows 2000 style X)
-    const closeButton = document.createElement('button');
-    closeButton.innerHTML = 'X';
-    closeButton.style.width = '16px';
-    closeButton.style.height = '16px';
-    closeButton.style.padding = '0';
-    closeButton.style.margin = '0';
-    closeButton.style.display = 'flex';
-    closeButton.style.alignItems = 'center';
-    closeButton.style.justifyContent = 'center';
-    closeButton.style.backgroundColor = '#c0c0c0';
-    closeButton.style.color = '#000000';
-    closeButton.style.border = '2px solid';
-    closeButton.style.borderColor = '#ffffff #808080 #808080 #ffffff';
-    closeButton.style.fontSize = '10px';
-    closeButton.style.fontWeight = 'bold';
-    closeButton.style.cursor = 'pointer';
-    closeButton.addEventListener('click', () => this.closeModal());
-    titleBar.appendChild(closeButton);
-    
-    modalContent.appendChild(titleBar);
-    
-    // Add circuit options
-    const content = document.createElement('div');
-    content.style.padding = '10px';
-    content.innerHTML = `
-      <p style="margin-bottom: 15px;">Select a circuit to purchase for your datacenter:</p>
-      <div id="circuit-options" style="display: flex; flex-direction: column; gap: 10px;"></div>
-      <div style="margin-top: 20px; text-align: center;">
-        <button id="purchase-circuit-btn" disabled>Purchase</button>
-        <button id="cancel-purchase-btn">Cancel</button>
-      </div>
-    `;
-    
-    // Style the buttons in Windows 2000 fashion
-    modalContent.appendChild(content);
-    
-    // Show the modal
-    this.openModal(modalContent);
-    
-    // Style the buttons after they're in the DOM
-    const purchaseBtn = document.getElementById('purchase-circuit-btn');
-    const cancelBtn = document.getElementById('cancel-purchase-btn');
-    
-    [purchaseBtn, cancelBtn].forEach(btn => {
-      btn.style.padding = '4px 8px';
-      btn.style.backgroundColor = '#c0c0c0';
-      btn.style.color = '#000000';
-      btn.style.border = '2px solid';
-      btn.style.borderColor = '#ffffff #808080 #808080 #ffffff';
-      btn.style.borderRadius = '0';
-      btn.style.cursor = 'pointer';
-      btn.style.fontFamily = 'Tahoma, Arial, sans-serif';
-      btn.style.fontSize = '11px';
-      btn.style.marginLeft = '5px';
-      btn.style.marginRight = '5px';
-    });
-    
-    // Disable the purchase button initially
-    purchaseBtn.disabled = true;
-    purchaseBtn.style.opacity = '0.5';
-    
-    // Populate circuit options
-    const circuitOptionsContainer = document.getElementById('circuit-options');
-    let selectedCircuitType = null;
-    
-    // Add each circuit type as a radio button option
-    Object.entries(CIRCUIT_TYPES).forEach(([type, specs]) => {
-      const optionContainer = document.createElement('div');
-      optionContainer.style.display = 'flex';
-      optionContainer.style.alignItems = 'center';
-      optionContainer.style.gap = '10px';
-      optionContainer.style.padding = '8px';
-      optionContainer.style.border = '1px solid #808080';
-      optionContainer.style.cursor = 'pointer';
-      
-      // Create radio button
-      const radio = document.createElement('input');
-      radio.type = 'radio';
-      radio.name = 'circuit-type';
-      radio.value = type;
-      radio.id = `circuit-${type}`;
-      radio.style.cursor = 'pointer';
-      
-      // Create label
-      const label = document.createElement('label');
-      label.htmlFor = `circuit-${type}`;
-      label.style.cursor = 'pointer';
-      label.style.flex = '1';
-      
-      // Add circuit info
-      label.innerHTML = `
-        <div><strong>${specs.name}</strong></div>
-        <div>Speed: ${specs.speed} Gbps</div>
-        <div>Cost: $${specs.cost}/month</div>
-        <div>Max Connections: ${specs.maxConnections}</div>
-      `;
-      
-      // Add colored indicator
-      const colorIndicator = document.createElement('div');
-      colorIndicator.style.width = '20px';
-      colorIndicator.style.height = '20px';
-      colorIndicator.style.backgroundColor = `#${specs.color.toString(16).padStart(6, '0')}`;
-      colorIndicator.style.border = '1px solid #808080';
-      
-      // Add selection handler
-      optionContainer.addEventListener('click', () => {
-        // Select this option
-        radio.checked = true;
-        selectedCircuitType = type;
-        
-        // Update container styling to show selection
-        document.querySelectorAll('#circuit-options > div').forEach(div => {
-          div.style.backgroundColor = '';
-        });
-        optionContainer.style.backgroundColor = '#e0e0e0'; // Light gray background for selected option
-        
-        // Enable purchase button
-        purchaseBtn.disabled = false;
-        purchaseBtn.style.opacity = '1';
-      });
-      
-      // Assemble option
-      optionContainer.appendChild(radio);
-      optionContainer.appendChild(label);
-      optionContainer.appendChild(colorIndicator);
-      circuitOptionsContainer.appendChild(optionContainer);
-    });
-    
-    // Add purchase button handler
-    purchaseBtn.addEventListener('click', () => {
-      if (selectedCircuitType) {
-        const circuitSpecs = CIRCUIT_TYPES[selectedCircuitType];
-        const cost = circuitSpecs.cost;
-        
-        // Check if player has enough funds
-        if (this.game.datacenter.funds >= cost) {
-          // Deduct initial cost (one month's fee)
-          this.game.datacenter.updateFunds(-cost);
-          
-          // Add circuit to egress router
-          this.game.datacenter.egressRouter.addCircuit(selectedCircuitType);
-          
-          // Show success message
-          alert(`Successfully purchased ${circuitSpecs.name} for $${cost}!`);
-          
-          // Close modal
-          this.closeModal();
-          
-          // Update stats
-          this.updateMenuStats();
-        } else {
-          alert(`Not enough funds! You need $${cost} to purchase this circuit.`);
-        }
-      }
-    });
-    
-    // Add cancel button handler
-    cancelBtn.addEventListener('click', () => {
-      this.closeModal();
-    });
   }
   
   createModalOverlay() {
@@ -1266,1303 +612,111 @@ export class UI {
     this.modalOverlay.appendChild(content);
     
     // Show modal directly
-    this.modalOverlay.show();
-    
-    // Force browser reflow
-    void this.modalOverlay.offsetWidth;
-    
-    console.log('Modal displayed with content:', content);
+    this.modalOverlay.style.display = 'flex';
   }
   
   closeModal() {
     console.log('CLOSING MODAL - DIRECT APPROACH');
-    
-    // Hide the modal directly
-    this.modalOverlay.hide();
-    
-    // Reset state after a small delay
-    setTimeout(() => {
-      this.currentRack = null;
-      this.selectedServer = null;
-      this.dragData = null;
-    }, 50);
-  }
-  
-  // Add drag and drop event listeners to an element
-  addDragEvents(element, item, itemType) {
-    element.draggable = true;
-    
-    element.addEventListener('dragstart', (e) => {
-      e.preventDefault(); // Prevent default drag behavior, we'll implement our own
-    });
-    
-    // Custom mouse-based dragging (more control than HTML5 drag and drop)
-    element.addEventListener('mousedown', (e) => {
-      // Only allow drag from the element itself (not child elements like buttons)
-      if (e.target !== element && !e.target.classList.contains('server-name') && 
-          !e.target.classList.contains('server-led')) {
-        return;
-      }
-      
-      // Start the drag
-      this.dragData.isDragging = true;
-      this.dragData.draggedElement = element;
-      this.dragData.draggedType = itemType;
-      this.dragData.draggedItemId = item.id;
-      this.dragData.sourcePosition = parseInt(element.dataset.position);
-      this.dragData.unitSize = parseInt(element.dataset.unitSize);
-      
-      // Calculate the offset where the user clicked within the element
-      const rect = element.getBoundingClientRect();
-      this.dragData.dragOffset = e.clientY - rect.top;
-      
-      // Add dragging class for visual feedback
-      element.classList.add('dragging');
-      
-      // Prevent text selection during drag
-      e.preventDefault();
-      
-      // Add mouse move and mouse up listeners to the document
-      document.addEventListener('mousemove', this.handleMouseMove);
-      document.addEventListener('mouseup', this.handleMouseUp);
-    });
-    
-    // Store these handlers bound to the UI instance
-    this.handleMouseMove = this.handleMouseMove.bind(this);
-    this.handleMouseUp = this.handleMouseUp.bind(this);
-  }
-  
-  // Handle mouse movement during drag
-  handleMouseMove(e) {
-    if (!this.dragData.isDragging) return;
-    
-    const draggedElement = this.dragData.draggedElement;
-    const rackMain = draggedElement.parentElement;
-    const rackRect = rackMain.getBoundingClientRect();
-    
-    // Calculate position relative to the rack
-    const relativeY = e.clientY - rackRect.top - this.dragData.dragOffset;
-    
-    // Convert to a "bottom" position (since we're using bottom for positioning)
-    const bottomPosition = rackRect.height - relativeY - draggedElement.offsetHeight;
-    
-    // Update the element position
-    draggedElement.style.bottom = `${bottomPosition}px`;
-    
-    // Find the closest rack unit position
-    const unitSize = this.dragData.unitSize;
-    const rackUnitHeight = 20; // Height of one rack unit in pixels
-    const closestUnit = Math.round(bottomPosition / rackUnitHeight);
-    
-    // Highlight potential drop targets
-    const slots = rackMain.querySelectorAll('.server-slot');
-    let canDrop = true;
-    
-    // Check if the target position is valid
-    if (closestUnit < 0 || closestUnit + unitSize > this.currentRack.rackHeightUnits) {
-      canDrop = false;
-    } else {
-      // Check for overlaps with other equipment
-      for (let i = 0; i < unitSize; i++) {
-        const position = closestUnit + i;
-        if (!this.currentRack.isPositionAvailable(position, 1, this.dragData.draggedItemId)) {
-          canDrop = false;
-          break;
-        }
-      }
-    }
-    
-    // Remove previous drop target highlights
-    slots.forEach(slot => slot.classList.remove('drop-target'));
-    
-    // If it's a valid position, highlight the drop target slots
-    if (canDrop) {
-      this.dragData.dropTarget = closestUnit;
-      
-      for (let i = 0; i < unitSize; i++) {
-        const position = closestUnit + i;
-        const slot = slots[this.currentRack.rackHeightUnits - position - 1]; // Convert to array index (reversed)
-        if (slot) {
-          slot.classList.add('drop-target');
-        }
-      }
-    } else {
-      this.dragData.dropTarget = null;
+    if (this.modalOverlay) {
+      this.modalOverlay.style.display = 'none';
+      // Clear content
+      this.modalOverlay.innerHTML = '';
     }
   }
   
-  // Handle mouse up (drop) event
-  handleMouseUp(e) {
-    if (!this.dragData.isDragging) return;
-    
-    // Remove document-level event listeners
-    document.removeEventListener('mousemove', this.handleMouseMove);
-    document.removeEventListener('mouseup', this.handleMouseUp);
-    
-    const draggedElement = this.dragData.draggedElement;
-    draggedElement.classList.remove('dragging');
-    
-    // Get all slots and remove drop-target class
-    const slots = draggedElement.parentElement.querySelectorAll('.server-slot');
-    slots.forEach(slot => slot.classList.remove('drop-target'));
-    
-    // Check if we have a valid drop target
-    if (this.dragData.dropTarget !== null) {
-      const newPosition = this.dragData.dropTarget;
-      const oldPosition = this.dragData.sourcePosition;
-      
-      // Only proceed if the position actually changed
-      if (newPosition !== oldPosition) {
-        // Update the position in the data model
-        if (this.dragData.draggedType === 'server') {
-          // Find the server
-          const server = this.currentRack.servers.find(s => s.id === this.dragData.draggedItemId);
-          if (server) {
-            // Move the server in the data model
-            this.moveRackItem(server, newPosition);
-          }
-        } else if (this.dragData.draggedType === 'network') {
-          // Find the network equipment
-          const equipment = this.currentRack.networkEquipment.find(eq => eq.id === this.dragData.draggedItemId);
-          if (equipment) {
-            // Move the equipment in the data model
-            this.moveRackItem(equipment, newPosition);
-          }
-        }
-        
-        // Update the visual position
-        draggedElement.style.bottom = `${newPosition * 20}px`;
-        draggedElement.dataset.position = newPosition;
-      } else {
-        // If position didn't change, reset to original position
-        draggedElement.style.bottom = `${oldPosition * 20}px`;
-      }
-    } else {
-      // Invalid drop - reset to original position
-      draggedElement.style.bottom = `${this.dragData.sourcePosition * 20}px`;
-    }
-    
-    // Reset drag state
-    this.dragData.isDragging = false;
-    this.dragData.draggedElement = null;
-    this.dragData.draggedType = null;
-    this.dragData.draggedItemId = null;
-    this.dragData.sourcePosition = null;
-    this.dragData.dropTarget = null;
+  update() {
+    // Update stats display
+    this.updateMenuStats();
   }
   
-  // Move an item (server or network equipment) to a new position in the rack
-  moveRackItem(item, newPosition) {
-    // Update the item's position
-    item.position = newPosition;
+  makePanelDraggable(panel, dragHandle) {
+    let isDragging = false;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
     
-    // If we need to update any connections or dependencies, do it here
-    if (this.game.cableManager) {
-      this.game.cableManager.updateAllCables();
+    // Add to tracking array
+    if (!this.draggablePanels) {
+      this.draggablePanels = [];
     }
-  }
-  
-  showRackView(rack) {
-    console.log("SHOW RACK VIEW CALLED FOR RACK:", rack);
+    if (!this.draggablePanels.includes(panel)) {
+      this.draggablePanels.push(panel);
+    }
     
-    // Debug DOM state
-    console.log("DOM state at showRackView start:");
-    console.log("- modalOverlay display:", this.modalOverlay.style.display);
-    console.log("- body children count:", document.body.children.length);
+    // Style drag handle
+    dragHandle.style.cursor = 'move';
     
-    this.currentRack = rack;
-    this.dragData = {
-      isDragging: false,
-      draggedElement: null,
-      draggedType: null,
-      draggedItemId: null,
-      sourcePosition: null,
-      dragOffset: 0,
-      dropTarget: null
-    };
+    // Add titlebar icons
+    const titlebarIcons = document.createElement('div');
+    titlebarIcons.style.display = 'flex';
+    titlebarIcons.style.marginLeft = 'auto';
     
-    // Create modal content container
-    const modalContent = document.createElement('div');
-    modalContent.className = 'modal-content';
-    
-    // Add Windows 2000 style title bar with close button
-    const titleBar = document.createElement('div');
-    titleBar.style.backgroundColor = '#0000a5'; // Windows 2000 blue
-    titleBar.style.color = '#ffffff';
-    titleBar.style.padding = '3px 5px';
-    titleBar.style.margin = '-2px -2px 5px -2px'; // Extend to edges
-    titleBar.style.fontWeight = 'bold';
-    titleBar.style.fontSize = '12px';
-    titleBar.style.display = 'flex';
-    titleBar.style.justifyContent = 'space-between';
-    titleBar.style.alignItems = 'center';
-    
-    // Add title text
-    const titleText = document.createElement('span');
-    titleText.textContent = `Rack ${rack.container.userData.gridX},${rack.container.userData.gridZ} - ${rack.rackHeightUnits}U`;
-    titleBar.appendChild(titleText);
-    
-    // Add close button (Windows 2000 style X)
-    const closeButton = document.createElement('button');
-    closeButton.innerHTML = 'X';
-    closeButton.style.width = '16px';
-    closeButton.style.height = '16px';
-    closeButton.style.padding = '0';
-    closeButton.style.margin = '0';
+    // Close button
+    const closeButton = document.createElement('div');
+    closeButton.style.width = '14px';
+    closeButton.style.height = '14px';
+    closeButton.style.marginLeft = '2px';
+    closeButton.style.backgroundColor = '#c0c0c0';
+    closeButton.style.border = '1px solid #808080';
     closeButton.style.display = 'flex';
     closeButton.style.alignItems = 'center';
     closeButton.style.justifyContent = 'center';
-    closeButton.style.backgroundColor = '#c0c0c0';
-    closeButton.style.color = '#000000';
-    closeButton.style.border = '2px solid';
-    closeButton.style.borderColor = '#ffffff #808080 #808080 #ffffff';
     closeButton.style.fontSize = '10px';
     closeButton.style.fontWeight = 'bold';
     closeButton.style.cursor = 'pointer';
-    closeButton.addEventListener('click', () => this.closeModal());
+    closeButton.innerHTML = 'X';
+    closeButton.addEventListener('click', () => {
+      panel.style.display = 'none';
+    });
     
-    titleBar.appendChild(closeButton);
-    modalContent.appendChild(titleBar);
+    titlebarIcons.appendChild(closeButton);
+    dragHandle.appendChild(titlebarIcons);
     
-    // Create rack view container with Windows 2000 styling
-    const rackView = document.createElement('div');
-    rackView.className = 'rack-view';
-    rackView.style.padding = '10px';
-    rackView.style.fontFamily = 'Tahoma, Arial, sans-serif';
-    rackView.style.fontSize = '11px';
-    
-    // Create rack container (with unit numbers and main rack area)
-    const rackContainer = document.createElement('div');
-    rackContainer.className = 'rack-container';
-    
-    // Add unit numbers column
-    const rackUnits = document.createElement('div');
-    rackUnits.className = 'rack-units';
-    
-    for (let i = 1; i <= rack.rackHeightUnits; i++) {
-      const unitNumber = document.createElement('div');
-      unitNumber.className = 'rack-unit-number';
-      unitNumber.textContent = i;
-      rackUnits.appendChild(unitNumber);
-    }
-    
-    rackContainer.appendChild(rackUnits);
-    
-    // Add main rack area
-    const rackMain = document.createElement('div');
-    rackMain.className = 'rack-main';
-    
-    // Add empty server slots
-    for (let i = 1; i <= rack.rackHeightUnits; i++) {
-      const slot = document.createElement('div');
-      slot.className = 'server-slot';
-      slot.dataset.position = i;
-      rackMain.appendChild(slot);
-    }
-    
-    // Add servers to the rack view
-    rack.servers.forEach(server => {
-      const serverElement = document.createElement('div');
-      serverElement.className = 'rack-server draggable';
-      serverElement.dataset.type = 'server';
-      serverElement.dataset.id = server.id;
-      serverElement.dataset.position = server.position;
-      serverElement.dataset.unitSize = server.unitSize;
+    dragHandle.addEventListener('mousedown', (e) => {
+      isDragging = true;
       
-      // Set height based on server unit size
-      const height = server.unitSize * 20;
+      const rect = panel.getBoundingClientRect();
+      dragOffsetX = e.clientX - rect.left;
+      dragOffsetY = e.clientY - rect.top;
       
-      // Set position (convert from 0-indexed to 1-indexed)
-      const bottom = (server.position) * 20;
-      
-      serverElement.style.height = `${height}px`;
-      serverElement.style.bottom = `${bottom}px`;
-      
-      // Add server color based on unit size
-      let serverColor;
-      switch(server.unitSize) {
-        case 1: serverColor = '#4CAF50'; break; // Green for 1U
-        case 2: serverColor = '#2196F3'; break; // Blue for 2U
-        case 4: serverColor = '#FF9800'; break; // Orange for 4U
-        default: serverColor = '#9C27B0'; break; // Purple for others
-      }
-      serverElement.style.borderLeft = `4px solid ${serverColor}`;
-      
-      // Add LEDs
-      const powerLed = document.createElement('div');
-      powerLed.className = 'server-led power';
-      serverElement.appendChild(powerLed);
-      
-      const activityLed = document.createElement('div');
-      activityLed.className = 'server-led activity';
-      // Blink if server is active
-      if (server.utilization > 5) {
-        activityLed.style.animation = 'blink 1s infinite';
-      }
-      serverElement.appendChild(activityLed);
-      
-      // Add server name
-      const serverName = document.createElement('div');
-      serverName.className = 'server-name';
-      serverName.textContent = `${server.unitSize}U Server - ${server.specs.cpu.cores} CPU, ${server.specs.ram}GB RAM`;
-      serverElement.appendChild(serverName);
-      
-      // Add server element to rack main area
-      rackMain.appendChild(serverElement);
-      
-      // Add drag & drop events
-      this.addDragEvents(serverElement, server, 'server');
-      
-      // Add click event to show server details - only trigger on non-drag interactions
-      let isDragging = false;
-      serverElement.addEventListener('mousedown', () => {
-        isDragging = false;
-      });
-      serverElement.addEventListener('mousemove', () => {
-        if (this.dragData.isDragging) isDragging = true;
-      });
-      serverElement.addEventListener('mouseup', () => {
-        if (!isDragging && !this.dragData.isDragging) {
-          this.showServerDetails(server);
+      // Apply active window styling to bring it to front
+      this.draggablePanels.forEach(p => {
+        p.style.zIndex = '101';
+        if (p.querySelector('.win2k-titlebar')) {
+          p.querySelector('.win2k-titlebar').style.backgroundColor = '#7b7b7b';
         }
       });
+      panel.style.zIndex = '102';
+      dragHandle.style.backgroundColor = '#0000a5';
+      
+      // Prevent text selection during drag
+      e.preventDefault();
     });
     
-    // Add network equipment to the rack view
-    rack.networkEquipment.forEach(equipment => {
-      const equipmentElement = document.createElement('div');
-      equipmentElement.className = 'rack-server network-equipment draggable';
-      equipmentElement.dataset.type = 'network';
-      equipmentElement.dataset.id = equipment.id;
-      equipmentElement.dataset.position = equipment.position;
-      equipmentElement.dataset.unitSize = equipment.unitSize;
-      
-      // Set height based on equipment unit size
-      const height = equipment.unitSize * 20;
-      
-      // Set position (convert from 0-indexed to 1-indexed)
-      const bottom = (equipment.position) * 20;
-      
-      equipmentElement.style.height = `${height}px`;
-      equipmentElement.style.bottom = `${bottom}px`;
-      
-      // Add equipment color based on type
-      equipmentElement.style.borderLeft = `4px solid #${equipment.specs.color.toString(16).padStart(6, '0')}`;
-      
-      // Add LEDs
-      const powerLed = document.createElement('div');
-      powerLed.className = 'server-led power';
-      equipmentElement.appendChild(powerLed);
-      
-      const activityLed = document.createElement('div');
-      activityLed.className = 'server-led activity';
-      // Blink if equipment is active
-      if (equipment.utilization > 5) {
-        activityLed.style.animation = 'blink 1s infinite';
+    document.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        panel.style.left = `${e.clientX - dragOffsetX}px`;
+        panel.style.top = `${e.clientY - dragOffsetY}px`;
       }
-      equipmentElement.appendChild(activityLed);
-      
-      // Add equipment name
-      const equipmentName = document.createElement('div');
-      equipmentName.className = 'server-name';
-      equipmentName.textContent = `${equipment.specs.name} - ${equipment.numPorts} ports`;
-      equipmentElement.appendChild(equipmentName);
-      
-      // Add equipment element to rack main area
-      rackMain.appendChild(equipmentElement);
-      
-      // Add drag & drop events
-      this.addDragEvents(equipmentElement, equipment, 'network');
-      
-      // Add click event to show equipment details - only trigger on non-drag interactions
-      let isDragging = false;
-      equipmentElement.addEventListener('mousedown', () => {
-        isDragging = false;
-      });
-      equipmentElement.addEventListener('mousemove', () => {
-        if (this.dragData.isDragging) isDragging = true;
-      });
-      equipmentElement.addEventListener('mouseup', () => {
-        if (!isDragging && !this.dragData.isDragging) {
-          this.showNetworkEquipmentDetails(equipment);
-        }
-      });
     });
     
-    rackContainer.appendChild(rackMain);
-    rackView.appendChild(rackContainer);
-    
-    // Add Windows 98/2000 style toolbar
-    const toolbar = document.createElement('div');
-    toolbar.className = 'server-toolbar';
-    toolbar.style.display = 'flex';
-    toolbar.style.gap = '6px';
-    toolbar.style.marginTop = '10px';
-    toolbar.style.padding = '6px';
-    toolbar.style.backgroundColor = '#d4d0c8';
-    toolbar.style.border = '2px solid';
-    toolbar.style.borderColor = '#ffffff #808080 #808080 #ffffff';
-    
-    // Create Windows 98/2000 style buttons
-    const createWin98Button = (text, onClick) => {
-      const btn = document.createElement('button');
-      btn.textContent = text;
-      btn.style.padding = '4px 8px';
-      btn.style.backgroundColor = '#c0c0c0';
-      btn.style.color = '#000000';
-      btn.style.border = '2px solid';
-      btn.style.borderColor = '#ffffff #808080 #808080 #ffffff';
-      btn.style.borderRadius = '0';
-      btn.style.cursor = 'pointer';
-      btn.style.fontFamily = 'Tahoma, Arial, sans-serif';
-      btn.style.fontSize = '11px';
-      btn.style.fontWeight = 'normal';
-      btn.style.textAlign = 'center';
-      btn.style.boxShadow = '1px 1px 0px #000000';
-      
-      btn.addEventListener('mousedown', () => {
-        btn.style.backgroundColor = '#a0a0a0';
-        btn.style.borderColor = '#808080 #ffffff #ffffff #808080';
-        btn.style.transform = 'translateY(1px)';
-      });
-      
-      btn.addEventListener('mouseup', () => {
-        btn.style.backgroundColor = '#c0c0c0';
-        btn.style.borderColor = '#ffffff #808080 #808080 #ffffff';
-        btn.style.transform = 'translateY(0)';
-      });
-      
-      btn.addEventListener('mouseleave', () => {
-        btn.style.backgroundColor = '#c0c0c0';
-        btn.style.borderColor = '#ffffff #808080 #808080 #ffffff';
-        btn.style.transform = 'translateY(0)';
-      });
-      
-      btn.addEventListener('click', onClick);
-      return btn;
-    };
-    
-    const addServerBtn = createWin98Button('Add Server', () => {
-      this.showAddServerUI(rack);
-    });
-    toolbar.appendChild(addServerBtn);
-    
-    const addNetworkBtn = createWin98Button('Add Network Equipment', () => {
-      this.showAddNetworkEquipmentUI(rack);
-    });
-    toolbar.appendChild(addNetworkBtn);
-    
-    const manageBtn = createWin98Button('Manage Cables', () => {
-      this.showCableManagementUI(rack);
-    });
-    toolbar.appendChild(manageBtn);
-    
-    rackView.appendChild(toolbar);
-    
-    // Add equipment details section
-    const equipmentDetails = document.createElement('div');
-    equipmentDetails.className = 'server-details';
-    equipmentDetails.id = 'equipment-details';
-    rackView.appendChild(equipmentDetails);
-    
-    modalContent.appendChild(rackView);
-    
-    // Open the modal
-    this.openModal(modalContent);
-  }
-  
-  // Display cable management interface
-  showCableManagementUI(rack) {
-    // Get the equipment details div
-    const equipmentDetails = document.getElementById('equipment-details');
-    equipmentDetails.classList.add('active');
-    
-    equipmentDetails.innerHTML = `
-      <h3>Cable Management</h3>
-      <p>Hold the 'C' key and click on a port to start connecting a cable.</p>
-      <p>Click on another port to complete the connection.</p>
-      <p>Press ESC to cancel the current cable connection.</p>
-      
-      <h4>Network Equipment</h4>
-      <div id="network-equipment-list"></div>
-      
-      <h4>Active Connections</h4>
-      <div id="connections-list"></div>
-      
-      <h4>VLAN Configuration</h4>
-      <div id="vlan-configuration"></div>
-    `;
-    
-    const networkList = document.getElementById('network-equipment-list');
-    
-    // Show all network equipment in the rack
-    rack.networkEquipment.forEach(equipment => {
-      const equipmentItem = document.createElement('div');
-      equipmentItem.className = 'network-item';
-      equipmentItem.innerHTML = `
-        <div class="network-item-header">
-          <div class="network-item-name">${equipment.name} (${equipment.specs.name})</div>
-          <div class="network-item-ports">${equipment.ports.filter(p => p.status === 'up').length}/${equipment.ports.length} ports connected</div>
-        </div>
-      `;
-      
-      // Add click handler to show ports
-      equipmentItem.addEventListener('click', () => {
-        this.showNetworkEquipmentDetails(equipment);
-      });
-      
-      networkList.appendChild(equipmentItem);
-    });
-    
-    // Toggle cable mode when entering cable management
-    this.game.toggleCableMode(true);
-    
-    // Add event listener to exit cable mode when closing dialog
-    const closeButton = document.querySelector('.modal-close');
-    if (closeButton) {
-      const originalClick = closeButton.onclick;
-      closeButton.onclick = () => {
-        this.game.toggleCableMode(false);
-        if (originalClick) originalClick();
-      };
-    }
-  }
-  
-  // Show UI for adding a server to the rack
-  showAddServerUI(rack) {
-    // Get the equipment details div
-    const equipmentDetails = document.getElementById('equipment-details');
-    equipmentDetails.classList.add('active');
-    
-    // Calculate available positions in the rack
-    const availablePositions = [];
-    for (let i = 0; i < rack.rackHeightUnits; i++) {
-      // Check different server sizes at this position
-      const available1U = rack.isPositionAvailable(i, 1);
-      const available2U = rack.isPositionAvailable(i, 2);
-      const available4U = rack.isPositionAvailable(i, 4);
-      
-      if (available1U || available2U || available4U) {
-        availablePositions.push({
-          position: i,
-          available1U,
-          available2U,
-          available4U
-        });
-      }
-    }
-    
-    equipmentDetails.innerHTML = `
-      <h3>Add Server</h3>
-      <p>Select a server size and position to add it to the rack.</p>
-      
-      <div class="form-group">
-        <label for="server-size">Server Size:</label>
-        <select id="server-size">
-          <option value="1">1U</option>
-          <option value="2">2U</option>
-          <option value="4">4U</option>
-        </select>
-      </div>
-      
-      <div class="form-group">
-        <label for="server-position">Position:</label>
-        <select id="server-position"></select>
-      </div>
-      
-      <button id="add-server-btn">Add Server</button>
-    `;
-    
-    // Populate the position dropdown based on selected size
-    const sizeSelect = document.getElementById('server-size');
-    const positionSelect = document.getElementById('server-position');
-    
-    const updatePositions = () => {
-      const size = parseInt(sizeSelect.value);
-      positionSelect.innerHTML = '';
-      
-      for (const pos of availablePositions) {
-        if ((size === 1 && pos.available1U) || 
-            (size === 2 && pos.available2U) || 
-            (size === 4 && pos.available4U)) {
-          const option = document.createElement('option');
-          option.value = pos.position;
-          option.textContent = `Position ${pos.position + 1}`;
-          positionSelect.appendChild(option);
-        }
-      }
-    };
-    
-    sizeSelect.addEventListener('change', updatePositions);
-    updatePositions(); // Initial population
-    
-    // Add server button handler
-    document.getElementById('add-server-btn').addEventListener('click', () => {
-      const size = parseInt(sizeSelect.value);
-      const position = parseInt(positionSelect.value);
-      
-      if (!isNaN(size) && !isNaN(position)) {
-        const server = rack.addServer(position, size);
-        if (server) {
-          // Close and reopen rack view to refresh
-          this.closeModal();
-          this.showRackView(rack);
-        }
-      }
+    document.addEventListener('mouseup', () => {
+      isDragging = false;
     });
   }
   
-  // Show UI for adding network equipment
-  showAddNetworkEquipmentUI(rack) {
-    // Get the equipment details div
-    const equipmentDetails = document.getElementById('equipment-details');
-    equipmentDetails.classList.add('active');
+  cascadeWindows() {
+    if (!this.draggablePanels) return;
     
-    // Calculate available positions (assuming 1U for network equipment)
-    const availablePositions = [];
-    for (let i = 0; i < rack.rackHeightUnits; i++) {
-      if (rack.isPositionAvailable(i, 1)) {
-        availablePositions.push(i);
+    let offsetX = 50;
+    let offsetY = 50;
+    
+    this.draggablePanels.forEach(panel => {
+      if (panel.style.display !== 'none') {
+        panel.style.left = `${offsetX}px`;
+        panel.style.top = `${offsetY}px`;
+        offsetX += 20;
+        offsetY += 20;
       }
-    }
-    
-    equipmentDetails.innerHTML = `
-      <h3>Add Network Equipment</h3>
-      <p>Select the type of network equipment to add to the rack.</p>
-      
-      <div class="form-group">
-        <label for="equipment-type">Equipment Type:</label>
-        <select id="equipment-type">
-          <option value="SWITCH">Switch</option>
-          <option value="ROUTER">Router</option>
-          <option value="FIREWALL">Firewall</option>
-          <option value="PATCH_PANEL">Patch Panel</option>
-          <option value="LOAD_BALANCER">Load Balancer</option>
-        </select>
-      </div>
-      
-      <div class="form-group">
-        <label for="port-count">Number of Ports:</label>
-        <select id="port-count">
-          <option value="8">8 Ports</option>
-          <option value="16">16 Ports</option>
-          <option value="24" selected>24 Ports</option>
-          <option value="48">48 Ports</option>
-        </select>
-      </div>
-      
-      <div class="form-group">
-        <label for="port-type">Port Type:</label>
-        <select id="port-type">
-          <option value="ethernet">Ethernet (RJ45)</option>
-          <option value="sfp">SFP (1G Fiber)</option>
-          <option value="sfp+">SFP+ (10G Fiber)</option>
-          <option value="qsfp">QSFP+ (40G Fiber)</option>
-        </select>
-      </div>
-      
-      <div class="form-group">
-        <label for="equipment-position">Position:</label>
-        <select id="equipment-position"></select>
-      </div>
-      
-      <button id="add-equipment-btn">Add Equipment</button>
-    `;
-    
-    // Populate position dropdown
-    const positionSelect = document.getElementById('equipment-position');
-    for (const position of availablePositions) {
-      const option = document.createElement('option');
-      option.value = position;
-      option.textContent = `Position ${position + 1}`;
-      positionSelect.appendChild(option);
-    }
-    
-    // Add equipment button handler
-    document.getElementById('add-equipment-btn').addEventListener('click', () => {
-      const type = document.getElementById('equipment-type').value;
-      const portCount = parseInt(document.getElementById('port-count').value);
-      const portType = document.getElementById('port-type').value;
-      const position = parseInt(positionSelect.value);
-      
-      if (type && !isNaN(portCount) && portType && !isNaN(position)) {
-        const options = {
-          numPorts: portCount,
-          portType: portType
-        };
-        
-        const equipment = rack.addNetworkEquipment(type, position, options);
-        if (equipment) {
-          // Close and reopen rack view to refresh
-          this.closeModal();
-          this.showRackView(rack);
-        }
-      }
-    });
-  }
-  
-  // Show network equipment details
-  showNetworkEquipmentDetails(equipment) {
-    const equipmentDetails = document.getElementById('equipment-details');
-    equipmentDetails.classList.add('active');
-    
-    let portsList = '';
-    equipment.ports.forEach(port => {
-      const statusClass = port.status === 'up' ? 'port-up' : 'port-down';
-      const connectedText = port.connected ? 'Connected' : 'Not connected';
-      portsList += `
-        <div class="port-item ${statusClass}">
-          <div class="port-id">Port ${port.id}</div>
-          <div class="port-type">${port.type.toUpperCase()}</div>
-          <div class="port-speed">${port.speed} Gbps</div>
-          <div class="port-status">${connectedText}</div>
-          ${port.vlan ? `<div class="port-vlan">VLAN: ${port.vlan}</div>` : ''}
-        </div>
-      `;
-    });
-    
-    // Group ports into two columns for better display
-    const halfwayPoint = Math.ceil(equipment.ports.length / 2);
-    const firstColumnPorts = portsList.split('</div>').slice(0, halfwayPoint).join('</div>') + '</div>';
-    const secondColumnPorts = portsList.split('</div>').slice(halfwayPoint).join('</div>');
-    
-    equipmentDetails.innerHTML = `
-      <h3>${equipment.name}</h3>
-      <p>${equipment.specs.description}</p>
-      
-      <h4>Specifications</h4>
-      <p>Type: ${equipment.specs.name}</p>
-      <p>Ports: ${equipment.ports.length} (${equipment.portType.toUpperCase()})</p>
-      <p>Power: ${equipment.powerConsumption} W</p>
-      <p>Status: ${equipment.status}</p>
-      <p>Utilization: ${equipment.utilization.toFixed(1)}%</p>
-      <p>Temperature: ${equipment.temperature.toFixed(1)}°C</p>
-      <p>IP Address: ${equipment.ipAddress || 'Not connected'}</p>
-      <p>Gateway: ${equipment.gateway || 'N/A'}</p>
-      <p>Status: ${equipment.connected ? 'Connected' : 'No internet connectivity'}</p>
-      
-      <h4>Ports</h4>
-      <div class="ports-container">
-        <div class="ports-column">${firstColumnPorts}</div>
-        <div class="ports-column">${secondColumnPorts}</div>
-      </div>
-      
-      ${equipment.specs.capabilities.includes('vlan') ? `
-        <h4>VLAN Configuration</h4>
-        <div class="vlan-container">
-          ${Object.keys(equipment.vlans).map(vlanId => `
-            <div class="vlan-item">
-              <div class="vlan-id">VLAN ${vlanId}</div>
-              <div class="vlan-name">${equipment.vlans[vlanId].name}</div>
-              <div class="vlan-ports">Ports: ${equipment.vlans[vlanId].ports.join(', ') || 'None'}</div>
-            </div>
-          `).join('')}
-        </div>
-        
-        <div class="form-group">
-          <button id="add-vlan-btn">Add VLAN</button>
-          <button id="manage-vlans-btn">Manage VLANs</button>
-        </div>
-      ` : ''}
-      
-      <div class="form-group">
-        <button id="back-to-rack-btn">Back to Rack</button>
-        <button id="manage-equipment-btn">Manage Equipment</button>
-      </div>
-    `;
-    
-    // Add event handlers for buttons
-    document.getElementById('back-to-rack-btn').addEventListener('click', () => {
-      equipmentDetails.classList.remove('active');
-    });
-    
-    if (equipment.specs.capabilities.includes('vlan')) {
-      const addVlanBtn = document.getElementById('add-vlan-btn');
-      if (addVlanBtn) {
-        addVlanBtn.addEventListener('click', () => {
-          this.showAddVlanUI(equipment);
-        });
-      }
-      
-      const manageVlansBtn = document.getElementById('manage-vlans-btn');
-      if (manageVlansBtn) {
-        manageVlansBtn.addEventListener('click', () => {
-          this.showManageVlansUI(equipment);
-        });
-      }
-    }
-  }
-  
-  // Show UI for adding a new VLAN
-  showAddVlanUI(equipment) {
-    const equipmentDetails = document.getElementById('equipment-details');
-    
-    equipmentDetails.innerHTML = `
-      <h3>Add VLAN</h3>
-      <p>Create a new VLAN for ${equipment.name}.</p>
-      
-      <div class="form-group">
-        <label for="vlan-id">VLAN ID (1-4094):</label>
-        <input type="number" id="vlan-id" min="1" max="4094" value="100">
-      </div>
-      
-      <div class="form-group">
-        <label for="vlan-name">VLAN Name:</label>
-        <input type="text" id="vlan-name" placeholder="e.g. Data, Voice, Management">
-      </div>
-      
-      <div class="form-group">
-        <button id="create-vlan-btn">Create VLAN</button>
-        <button id="cancel-vlan-btn">Cancel</button>
-      </div>
-    `;
-    
-    // Button handlers
-    document.getElementById('create-vlan-btn').addEventListener('click', () => {
-      const vlanId = parseInt(document.getElementById('vlan-id').value);
-      const vlanName = document.getElementById('vlan-name').value;
-      
-      if (!isNaN(vlanId) && vlanId >= 1 && vlanId <= 4094 && vlanName) {
-        equipment.createVlan(vlanId, vlanName);
-        this.showNetworkEquipmentDetails(equipment);
-      }
-    });
-    
-    document.getElementById('cancel-vlan-btn').addEventListener('click', () => {
-      this.showNetworkEquipmentDetails(equipment);
-    });
-  }
-  
-  // Show UI for managing VLANs
-  showManageVlansUI(equipment) {
-    const equipmentDetails = document.getElementById('equipment-details');
-    
-    // Create VLAN options for dropdown
-    const vlanOptions = Object.keys(equipment.vlans).map(vlanId => 
-      `<option value="${vlanId}">${vlanId} - ${equipment.vlans[vlanId].name}</option>`
-    ).join('');
-    
-    equipmentDetails.innerHTML = `
-      <h3>Manage VLANs</h3>
-      <p>Assign ports to VLANs for ${equipment.name}.</p>
-      
-      <div class="form-group">
-        <label for="vlan-select">Select VLAN:</label>
-        <select id="vlan-select">
-          ${vlanOptions}
-        </select>
-      </div>
-      
-      <h4>Ports</h4>
-      <div id="port-assignment-container"></div>
-      
-      <div class="form-group">
-        <button id="save-vlan-config-btn">Save</button>
-        <button id="back-to-equipment-btn">Back</button>
-      </div>
-    `;
-    
-    const portAssignmentContainer = document.getElementById('port-assignment-container');
-    const vlanSelect = document.getElementById('vlan-select');
-    
-    // Function to update port display based on VLAN selection
-    const updatePortDisplay = () => {
-      const selectedVlanId = parseInt(vlanSelect.value);
-      const selectedVlan = equipment.vlans[selectedVlanId];
-      
-      let portHtml = '';
-      equipment.ports.forEach(port => {
-        const isAssigned = selectedVlan.ports.includes(port.id);
-        portHtml += `
-          <div class="port-assignment-item">
-            <label>
-              <input type="checkbox" data-port-id="${port.id}" ${isAssigned ? 'checked' : ''}>
-              Port ${port.id} (${port.type.toUpperCase()}, ${port.speed} Gbps)
-            </label>
-          </div>
-        `;
-      });
-      
-      portAssignmentContainer.innerHTML = portHtml;
-    };
-    
-    vlanSelect.addEventListener('change', updatePortDisplay);
-    updatePortDisplay(); // Initial display
-    
-    // Save button handler
-    document.getElementById('save-vlan-config-btn').addEventListener('click', () => {
-      const selectedVlanId = parseInt(vlanSelect.value);
-      
-      // Clear existing ports from this VLAN
-      equipment.vlans[selectedVlanId].ports = [];
-      
-      // Get all checked port checkboxes
-      const portCheckboxes = document.querySelectorAll('input[data-port-id]:checked');
-      portCheckboxes.forEach(checkbox => {
-        const portId = parseInt(checkbox.dataset.portId);
-        equipment.addPortToVlan(portId, selectedVlanId);
-      });
-      
-      this.showNetworkEquipmentDetails(equipment);
-    });
-    
-    document.getElementById('back-to-equipment-btn').addEventListener('click', () => {
-      this.showNetworkEquipmentDetails(equipment);
-    });
-  }
-  
-  showServerDetails(server) {
-    this.selectedServer = server;
-    
-    const equipmentDetails = document.getElementById('equipment-details');
-    equipmentDetails.classList.add('active');
-    
-    equipmentDetails.innerHTML = `
-      <h3>Server Details</h3>
-      <p>ID: ${server.id}</p>
-      <p>Size: ${server.unitSize}U</p>
-      <p>Position: ${server.position + 1}</p>
-      <h4>Specifications</h4>
-      <p>CPU: ${server.specs.cpu.cores} cores @ ${server.specs.cpu.speed} GHz</p>
-      <p>RAM: ${server.specs.ram} GB</p>
-      <p>Storage: ${server.specs.storage.map(s => `${s.size} GB ${s.type}`).join(', ')}</p>
-      <p>Network: ${server.specs.networkCards.map(n => `${n.speed} Gbps`).join(', ')}</p>
-      <h4>Performance</h4>
-      <p>Power Consumption: ${server.powerConsumption} W</p>
-      <p>Temperature: ${server.temperature.toFixed(1)}°C</p>
-      <p>Utilization: ${server.utilization.toFixed(1)}%</p>
-      <p>Revenue: $${server.revenue}/hour</p>
-      <h4>Network</h4>
-      <p>IP Address: ${server.ipAddress || 'Not connected'}</p>
-      <p>Gateway: ${server.gateway || 'N/A'}</p>
-      <p>Status: ${server.connected ? 'Connected to internet' : 'No internet connectivity'}</p>
-      <div style="margin-top: 15px;">
-        <button id="upgrade-cpu-btn">Upgrade CPU</button>
-        <button id="upgrade-ram-btn">Upgrade RAM</button>
-        <button id="upgrade-storage-btn">Add Storage</button>
-        <button id="upgrade-network-btn">Upgrade Network</button>
-      </div>
-    `;
-    
-    // Add event listeners for upgrade buttons
-    document.getElementById('upgrade-cpu-btn').addEventListener('click', () => {
-      server.upgradeComponent('cpu', 1);
-      this.showServerDetails(server); // Refresh view
-    });
-    
-    document.getElementById('upgrade-ram-btn').addEventListener('click', () => {
-      server.upgradeComponent('ram', 1);
-      this.showServerDetails(server);
-    });
-    
-    document.getElementById('upgrade-storage-btn').addEventListener('click', () => {
-      server.upgradeComponent('storage', 1);
-      this.showServerDetails(server);
-    });
-    
-    document.getElementById('upgrade-network-btn').addEventListener('click', () => {
-      server.upgradeComponent('network', 1);
-      this.showServerDetails(server);
-    });
-  }
-  
-  // Old update method removed - was causing errors by referencing statsPanel which no longer exists
-  
-  // Show egress router details
-  showEgressRouterView(egressRouter) {
-    console.log('Showing egress router view with router:', egressRouter);
-    console.log('Circuits:', egressRouter.circuits);
-    
-    // Create modal content container
-    const modalContent = document.createElement('div');
-    modalContent.className = 'modal-content';
-    
-    // Add close button
-    const closeButton = document.createElement('div');
-    closeButton.className = 'modal-close';
-    closeButton.innerHTML = '&times;';
-    closeButton.addEventListener('click', () => this.closeModal());
-    modalContent.appendChild(closeButton);
-    
-    // Add title
-    const title = document.createElement('h2');
-    title.textContent = egressRouter.name;
-    modalContent.appendChild(title);
-    
-    // Create container for router content
-    const routerContainer = document.createElement('div');
-    routerContainer.className = 'router-view';
-    
-    // Add circuits section
-    const circuitsSection = document.createElement('div');
-    circuitsSection.innerHTML = `
-      <h3>Internet Circuits</h3>
-      <p>These circuits provide internet connectivity to your datacenter.</p>
-      <div id="circuits-container"></div>
-      <button id="add-circuit-btn">Add New Circuit</button>
-    `;
-    routerContainer.appendChild(circuitsSection);
-    
-    // Add router equipment section
-    const routerSection = document.createElement('div');
-    routerSection.innerHTML = `
-      <h3>Router Equipment</h3>
-      <p>Core router for datacenter connectivity.</p>
-      <div id="router-details"></div>
-    `;
-    routerContainer.appendChild(routerSection);
-    
-    modalContent.appendChild(routerContainer);
-    
-    // Open the modal
-    this.openModal(modalContent);
-    
-    // Populate circuits
-    const circuitsContainer = document.getElementById('circuits-container');
-    egressRouter.circuits.forEach(circuit => {
-      const circuitItem = this.createCircuitItem(circuit);
-      circuitsContainer.appendChild(circuitItem);
-    });
-    
-    // Populate router details
-    const routerDetails = document.getElementById('router-details');
-    if (egressRouter.equipment) {
-      routerDetails.innerHTML = `
-        <p><strong>Name:</strong> ${egressRouter.equipment.name}</p>
-        <p><strong>Ports:</strong> ${egressRouter.equipment.ports.length}</p>
-        <p><strong>Connected Ports:</strong> ${egressRouter.equipment.ports.filter(p => p.status === 'up').length}</p>
-        <button id="view-router-btn">View Router Details</button>
-      `;
-      
-      document.getElementById('view-router-btn').addEventListener('click', () => {
-        this.showNetworkEquipmentDetails(egressRouter.equipment);
-      });
-    }
-    
-    // Add circuit button handler
-    document.getElementById('add-circuit-btn').addEventListener('click', () => {
-      this.showAddCircuitUI(egressRouter);
-    });
-  }
-  
-  // Create a circuit item for the UI
-  createCircuitItem(circuit) {
-    const item = document.createElement('div');
-    item.className = 'circuit-item';
-    item.style.padding = '15px';
-    item.style.margin = '10px 0';
-    item.style.backgroundColor = '#444';
-    item.style.borderRadius = '5px';
-    item.style.borderLeft = `5px solid #${circuit.specs.color.toString(16).padStart(6, '0')}`;
-    
-    const connections = circuit.connections.length;
-    const maxConnections = circuit.specs.maxConnections;
-    const usagePercent = (connections / maxConnections) * 100;
-    
-    item.innerHTML = `
-      <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-        <h4>${circuit.name}</h4>
-        <span>Cost: $${circuit.cost}/month</span>
-      </div>
-      <p><strong>Speed:</strong> ${circuit.speed} Gbps</p>
-      <p><strong>Network:</strong> ${circuit.ipRange.network}</p>
-      <p><strong>Utilization:</strong> ${circuit.utilization.toFixed(1)}%</p>
-      <p><strong>Connections:</strong> ${connections}/${maxConnections} (${usagePercent.toFixed(1)}%)</p>
-      <div style="margin-top: 10px;">
-        <button class="view-circuit-btn" data-circuit-id="${circuit.id}">View Details</button>
-        <button class="connect-circuit-btn" data-circuit-id="${circuit.id}">Connect Rack</button>
-      </div>
-    `;
-    
-    // Add event listeners after adding to DOM
-    setTimeout(() => {
-      const viewBtn = item.querySelector(`.view-circuit-btn[data-circuit-id="${circuit.id}"]`);
-      if (viewBtn) {
-        viewBtn.addEventListener('click', () => {
-          this.showCircuitView(circuit);
-        });
-      }
-      
-      const connectBtn = item.querySelector(`.connect-circuit-btn[data-circuit-id="${circuit.id}"]`);
-      if (connectBtn) {
-        connectBtn.addEventListener('click', () => {
-          this.showConnectRackUI(circuit);
-        });
-      }
-    }, 0);
-    
-    return item;
-  }
-  
-  // Show UI to add a new circuit
-  showAddCircuitUI(egressRouter) {
-    // Create modal content container
-    const modalContent = document.createElement('div');
-    modalContent.className = 'modal-content';
-    
-    // Add title & close button
-    const closeButton = document.createElement('div');
-    closeButton.className = 'modal-close';
-    closeButton.innerHTML = '&times;';
-    closeButton.addEventListener('click', () => this.closeModal());
-    modalContent.appendChild(closeButton);
-    
-    const title = document.createElement('h2');
-    title.textContent = 'Add New Circuit';
-    modalContent.appendChild(title);
-    
-    // Circuit options
-    const circuitOptions = Object.keys(CIRCUIT_TYPES).map(type => {
-      const circuit = CIRCUIT_TYPES[type];
-      return `
-        <div class="circuit-option" data-type="${type}">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h4>${circuit.name}</h4>
-            <span>$${circuit.cost}/month</span>
-          </div>
-          <p>Speed: ${circuit.speed} Gbps</p>
-          <p>Max Connections: ${circuit.maxConnections}</p>
-        </div>
-      `;
-    }).join('');
-    
-    const content = document.createElement('div');
-    content.innerHTML = `
-      <p>Select a circuit to add to your datacenter:</p>
-      <div class="circuit-options">
-        ${circuitOptions}
-      </div>
-      <div style="margin-top: 20px;">
-        <button id="add-selected-circuit-btn" disabled>Add Selected Circuit</button>
-        <button id="cancel-add-circuit-btn">Cancel</button>
-      </div>
-    `;
-    modalContent.appendChild(content);
-    
-    // Open the modal
-    this.openModal(modalContent);
-    
-    // Add event listeners
-    const circuitOptionElements = document.querySelectorAll('.circuit-option');
-    let selectedType = null;
-    
-    circuitOptionElements.forEach(option => {
-      option.addEventListener('click', () => {
-        // Deselect all
-        circuitOptionElements.forEach(o => o.classList.remove('selected'));
-        
-        // Select this one
-        option.classList.add('selected');
-        selectedType = option.dataset.type;
-        
-        // Enable the add button
-        document.getElementById('add-selected-circuit-btn').disabled = false;
-      });
-    });
-    
-    document.getElementById('add-selected-circuit-btn').addEventListener('click', () => {
-      if (selectedType) {
-        const circuit = egressRouter.addCircuit(selectedType);
-        this.showEgressRouterView(egressRouter);
-      }
-    });
-    
-    document.getElementById('cancel-add-circuit-btn').addEventListener('click', () => {
-      this.showEgressRouterView(egressRouter);
-    });
-  }
-  
-  // Show circuit details
-  showCircuitView(circuit) {
-    // Create modal content container
-    const modalContent = document.createElement('div');
-    modalContent.className = 'modal-content';
-    
-    // Add title & close button
-    const closeButton = document.createElement('div');
-    closeButton.className = 'modal-close';
-    closeButton.innerHTML = '&times;';
-    closeButton.addEventListener('click', () => this.closeModal());
-    modalContent.appendChild(closeButton);
-    
-    const title = document.createElement('h2');
-    title.textContent = circuit.name;
-    modalContent.appendChild(title);
-    
-    // IP allocation table
-    let ipTable = '';
-    const ips = Object.entries(circuit.ipRange.allocatedIps);
-    
-    if (ips.length > 0) {
-      ipTable = `
-        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-          <tr>
-            <th style="text-align: left; padding: 8px; border-bottom: 1px solid #444;">Device</th>
-            <th style="text-align: left; padding: 8px; border-bottom: 1px solid #444;">IP Address</th>
-            <th style="text-align: left; padding: 8px; border-bottom: 1px solid #444;">Allocated</th>
-          </tr>
-          ${ips.map(([deviceId, info]) => `
-            <tr>
-              <td style="padding: 8px; border-bottom: 1px solid #333;">${info.name}</td>
-              <td style="padding: 8px; border-bottom: 1px solid #333;">${info.ip}</td>
-              <td style="padding: 8px; border-bottom: 1px solid #333;">${new Date(info.allocated).toLocaleString()}</td>
-            </tr>
-          `).join('')}
-        </table>
-      `;
-    } else {
-      ipTable = '<p>No IP addresses allocated yet.</p>';
-    }
-    
-    const content = document.createElement('div');
-    content.innerHTML = `
-      <div style="display: flex; justify-content: space-between; margin-top: 10px;">
-        <div>
-          <p><strong>Type:</strong> ${circuit.specs.name}</p>
-          <p><strong>Speed:</strong> ${circuit.speed} Gbps</p>
-          <p><strong>Cost:</strong> $${circuit.cost}/month</p>
-          <p><strong>Status:</strong> ${circuit.status === 'active' ? 'Active' : 'Down'}</p>
-          <p><strong>Utilization:</strong> ${circuit.utilization.toFixed(1)}%</p>
-        </div>
-        <div>
-          <p><strong>Uptime:</strong> ${circuit.uptime}%</p>
-          <p><strong>Connections:</strong> ${circuit.connections.length}/${circuit.specs.maxConnections}</p>
-        </div>
-      </div>
-      
-      <h3 style="margin-top: 20px;">IP Allocation</h3>
-      <p><strong>Network:</strong> ${circuit.ipRange.network}</p>
-      <p><strong>Gateway:</strong> ${circuit.ipRange.gateway}</p>
-      <p><strong>Usable Range:</strong> ${circuit.ipRange.usable}</p>
-      
-      <h4 style="margin-top: 15px;">Allocated IPs</h4>
-      ${ipTable}
-      
-      <div style="margin-top: 20px;">
-        <button id="connect-rack-btn">Connect Rack</button>
-        <button id="remove-circuit-btn">Remove Circuit</button>
-        <button id="back-to-router-btn">Back to Router</button>
-      </div>
-    `;
-    modalContent.appendChild(content);
-    
-    // Open the modal
-    this.openModal(modalContent);
-    
-    // Add event listeners
-    document.getElementById('connect-rack-btn').addEventListener('click', () => {
-      this.showConnectRackUI(circuit);
-    });
-    
-    document.getElementById('remove-circuit-btn').addEventListener('click', () => {
-      if (confirm('Are you sure you want to remove this circuit? All connections will be lost.')) {
-        this.game.datacenter.egressRouter.removeCircuit(circuit.id);
-        this.showEgressRouterView(this.game.datacenter.egressRouter);
-      }
-    });
-    
-    document.getElementById('back-to-router-btn').addEventListener('click', () => {
-      this.showEgressRouterView(this.game.datacenter.egressRouter);
     });
   }
   
@@ -2703,6 +857,1467 @@ export class UI {
     
     document.getElementById('cancel-connect-btn').addEventListener('click', () => {
       this.showCircuitView(circuit);
+    });
+  }
+  
+  // Show UI to purchase a new circuit directly to receiving dock
+  showCircuitPurchaseUI() {
+    // Create modal content container
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    
+    // Add title & close button
+    const closeButton = document.createElement('div');
+    closeButton.className = 'modal-close';
+    closeButton.innerHTML = '&times;';
+    closeButton.addEventListener('click', () => this.closeModal());
+    modalContent.appendChild(closeButton);
+    
+    const title = document.createElement('h2');
+    title.textContent = 'Purchase New Circuit';
+    modalContent.appendChild(title);
+    
+    // Circuit options
+    const circuitOptions = Object.keys(CIRCUIT_TYPES).map(type => {
+      const circuit = CIRCUIT_TYPES[type];
+      return `
+        <div class="circuit-option" data-type="${type}" style="padding: 10px; margin: 5px 0; border: 1px solid #999; border-radius: 3px; cursor: pointer;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h4 style="margin: 0;">${circuit.name}</h4>
+            <span>$${circuit.cost}/month</span>
+          </div>
+          <p style="margin: 5px 0;">Speed: ${circuit.speed} Gbps</p>
+          <p style="margin: 5px 0;">Max Connections: ${circuit.maxConnections}</p>
+        </div>
+      `;
+    }).join('');
+    
+    const content = document.createElement('div');
+    content.innerHTML = `
+      <p>Select a circuit to add to your datacenter:</p>
+      <div class="circuit-options">
+        ${circuitOptions}
+      </div>
+      <div style="margin-top: 20px;">
+        <button id="purchase-selected-circuit-btn" disabled>Purchase Selected Circuit</button>
+        <button id="cancel-purchase-circuit-btn">Cancel</button>
+      </div>
+    `;
+    modalContent.appendChild(content);
+    
+    // Open the modal
+    this.openModal(modalContent);
+    
+    // Add event listeners
+    const circuitOptionElements = document.querySelectorAll('.circuit-option');
+    let selectedType = null;
+    
+    circuitOptionElements.forEach(option => {
+      option.addEventListener('click', () => {
+        // Deselect all
+        circuitOptionElements.forEach(o => o.classList.remove('selected'));
+        
+        // Select this one
+        option.classList.add('selected');
+        selectedType = option.dataset.type;
+        
+        // Enable the purchase button
+        document.getElementById('purchase-selected-circuit-btn').disabled = false;
+      });
+    });
+    
+    document.getElementById('purchase-selected-circuit-btn').addEventListener('click', () => {
+      if (selectedType) {
+        // Add circuit directly to the router
+        const circuit = this.game.datacenter.egressRouter.addCircuit(selectedType);
+        
+        if (circuit) {
+          // Show success message
+          alert(`Successfully purchased ${circuit.name} circuit for $${circuit.cost}/month`);
+          
+          // Return to dock UI
+          this.showReceivingDockUI();
+        } else {
+          alert('Failed to purchase circuit. Check your funds.');
+        }
+      }
+    });
+    
+    document.getElementById('cancel-purchase-circuit-btn').addEventListener('click', () => {
+      this.showReceivingDockUI();
+    });
+  }
+  
+  // Show rack details view
+  showRackView(rack) {
+    console.log("Showing rack view for rack:", rack);
+    
+    // Create modal content for the rack view
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    modalContent.style.width = '800px';
+    modalContent.style.maxWidth = '90%';
+    
+    // Add close button
+    const closeButton = document.createElement('div');
+    closeButton.className = 'modal-close';
+    closeButton.innerHTML = '&times;';
+    closeButton.addEventListener('click', () => this.closeModal());
+    modalContent.appendChild(closeButton);
+    
+    // Add title
+    const title = document.createElement('h2');
+    title.textContent = `Rack at Position (${rack.gridX}, ${rack.gridZ})`;
+    modalContent.appendChild(title);
+    
+    // Create tabs container for Windows 2000 style tabs
+    const tabContainer = document.createElement('div');
+    tabContainer.className = 'tab-container';
+    tabContainer.style.display = 'flex';
+    tabContainer.style.borderBottom = '1px solid #999';
+    tabContainer.style.marginBottom = '15px';
+    
+    // Overview tab
+    const overviewTab = document.createElement('div');
+    overviewTab.className = 'tab active';
+    overviewTab.textContent = 'Overview';
+    overviewTab.style.padding = '8px 15px';
+    overviewTab.style.backgroundColor = '#d4d0c8';
+    overviewTab.style.border = '1px solid #999';
+    overviewTab.style.borderBottom = 'none';
+    overviewTab.style.marginRight = '5px';
+    overviewTab.style.cursor = 'pointer';
+    overviewTab.style.borderTopLeftRadius = '4px';
+    overviewTab.style.borderTopRightRadius = '4px';
+    
+    // Servers tab
+    const serversTab = document.createElement('div');
+    serversTab.className = 'tab';
+    serversTab.textContent = 'Servers';
+    serversTab.style.padding = '8px 15px';
+    serversTab.style.backgroundColor = '#bbb';
+    serversTab.style.border = '1px solid #999';
+    serversTab.style.borderBottom = 'none';
+    serversTab.style.marginRight = '5px';
+    serversTab.style.cursor = 'pointer';
+    serversTab.style.borderTopLeftRadius = '4px';
+    serversTab.style.borderTopRightRadius = '4px';
+    
+    // Network tab
+    const networkTab = document.createElement('div');
+    networkTab.className = 'tab';
+    networkTab.textContent = 'Network';
+    networkTab.style.padding = '8px 15px';
+    networkTab.style.backgroundColor = '#bbb';
+    networkTab.style.border = '1px solid #999';
+    networkTab.style.borderBottom = 'none';
+    networkTab.style.cursor = 'pointer';
+    networkTab.style.borderTopLeftRadius = '4px';
+    networkTab.style.borderTopRightRadius = '4px';
+    
+    tabContainer.appendChild(overviewTab);
+    tabContainer.appendChild(serversTab);
+    tabContainer.appendChild(networkTab);
+    modalContent.appendChild(tabContainer);
+    
+    // Content container
+    const contentContainer = document.createElement('div');
+    contentContainer.className = 'tab-content-container';
+    modalContent.appendChild(contentContainer);
+    
+    // Helper function to show rack overview
+    const showRackOverview = () => {
+      // Calculate rack stats
+      const totalServers = rack.servers.length;
+      const totalNetworkEquipment = rack.networkEquipment.length;
+      const serverUnits = rack.servers.reduce((sum, server) => sum + (server.unitSize || 1), 0);
+      const networkUnits = rack.networkEquipment.reduce((sum, eq) => sum + (eq.unitSize || 1), 0);
+      const totalUsedUnits = serverUnits + networkUnits;
+      const freeUnits = rack.rackHeightUnits - totalUsedUnits;
+      
+      contentContainer.innerHTML = `
+        <h3>Rack Overview</h3>
+        <div style="display: flex; justify-content: space-between; flex-wrap: wrap;">
+          <div style="min-width: 250px; margin-bottom: 20px;">
+            <p><strong>Rack ID:</strong> ${rack.id}</p>
+            <p><strong>Position:</strong> (${rack.gridX}, ${rack.gridZ})</p>
+            <p><strong>Size:</strong> ${rack.rackHeightUnits}U</p>
+            <p><strong>Used Space:</strong> ${totalUsedUnits}U (${Math.round(totalUsedUnits/rack.rackHeightUnits*100)}%)</p>
+            <p><strong>Free Space:</strong> ${freeUnits}U</p>
+          </div>
+          <div style="min-width: 250px; margin-bottom: 20px;">
+            <p><strong>Total Servers:</strong> ${totalServers}</p>
+            <p><strong>Server Space:</strong> ${serverUnits}U</p>
+            <p><strong>Total Network Equipment:</strong> ${totalNetworkEquipment}</p>
+            <p><strong>Network Equipment Space:</strong> ${networkUnits}U</p>
+          </div>
+        </div>
+        <div style="margin-top: 20px;">
+          <button id="move-rack-btn">Move Rack</button>
+          ${freeUnits > 0 ? `<button id="add-equipment-btn">Add Equipment</button>` : ''}
+          <button id="remove-rack-btn">Remove Rack</button>
+        </div>
+      `;
+      
+      // Add event listeners
+      document.getElementById('move-rack-btn')?.addEventListener('click', () => {
+        alert('Not implemented yet: Rack movement. Use drag and drop in the main view.');
+      });
+      
+      document.getElementById('add-equipment-btn')?.addEventListener('click', () => {
+        this.showReceivingDockUI();
+      });
+      
+      document.getElementById('remove-rack-btn')?.addEventListener('click', () => {
+        if (confirm('Are you sure you want to remove this rack? All equipment will be lost!')) {
+          this.game.datacenter.removeRack(rack.gridX, rack.gridZ);
+          this.closeModal();
+        }
+      });
+    };
+    
+    // Helper function to show servers tab
+    const showServersTab = () => {
+      if (rack.servers.length === 0) {
+        contentContainer.innerHTML = `
+          <h3>Servers</h3>
+          <p>No servers installed in this rack.</p>
+          <button id="add-server-btn">Add Server</button>
+        `;
+        
+        document.getElementById('add-server-btn')?.addEventListener('click', () => {
+          this.showReceivingDockUI();
+        });
+        
+        return;
+      }
+      
+      // Create server list
+      const serverList = rack.servers.map(server => `
+        <div class="server-item" style="border: 1px solid #999; padding: 10px; margin-bottom: 10px; border-radius: 3px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h4 style="margin: 0;">${server.specs?.name || `${server.unitSize}U Server`}</h4>
+            <span>Position: ${server.position}</span>
+          </div>
+          <p>${server.specs?.cpu ? `CPU: ${server.specs.cpu.cores} cores @ ${server.specs.cpu.speed} GHz` : ''}</p>
+          <p>${server.specs?.ram ? `RAM: ${server.specs.ram} GB` : ''}</p>
+          <p>Power: ${server.powerConsumption || 'Unknown'} W</p>
+          <p>Revenue: ${server.revenue ? `$${server.revenue}/hour` : 'Unknown'}</p>
+          <p>Connection: ${server.connected ? 'Connected' : 'Not connected'}</p>
+          ${server.ipAddress ? `<p>IP Address: ${server.ipAddress}</p>` : ''}
+          <button class="remove-server-btn" data-server-id="${server.id}">Remove</button>
+        </div>
+      `).join('');
+      
+      contentContainer.innerHTML = `
+        <h3>Servers (${rack.servers.length})</h3>
+        <div class="server-list">
+          ${serverList}
+        </div>
+        <button id="add-server-btn" style="margin-top: 20px;">Add Server</button>
+      `;
+      
+      // Add event listeners
+      document.querySelectorAll('.remove-server-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const serverId = btn.dataset.serverId;
+          if (confirm('Are you sure you want to remove this server?')) {
+            rack.removeServer(serverId);
+            showServersTab(); // Refresh the tab
+          }
+        });
+      });
+      
+      document.getElementById('add-server-btn')?.addEventListener('click', () => {
+        this.showReceivingDockUI();
+      });
+    };
+    
+    // Helper function to show network tab
+    const showNetworkTab = () => {
+      if (rack.networkEquipment.length === 0) {
+        contentContainer.innerHTML = `
+          <h3>Network Equipment</h3>
+          <p>No network equipment installed in this rack.</p>
+          <button id="add-network-btn">Add Network Equipment</button>
+        `;
+        
+        document.getElementById('add-network-btn')?.addEventListener('click', () => {
+          this.showReceivingDockUI();
+        });
+        
+        return;
+      }
+      
+      // Create network equipment list
+      const equipmentList = rack.networkEquipment.map(equipment => `
+        <div class="equipment-item" style="border: 1px solid #999; padding: 10px; margin-bottom: 10px; border-radius: 3px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h4 style="margin: 0;">${equipment.name || equipment.type}</h4>
+            <span>Position: ${equipment.position}</span>
+          </div>
+          <p>Type: ${equipment.type}</p>
+          <p>Ports: ${equipment.ports ? equipment.ports.length : 'Unknown'}</p>
+          <p>Connected Ports: ${equipment.ports ? equipment.ports.filter(p => p.connected).length : '0'}</p>
+          <p>Power: ${equipment.powerConsumption || 'Unknown'} W</p>
+          ${equipment.ipAddress ? `<p>IP Address: ${equipment.ipAddress}</p>` : ''}
+          <button class="remove-equipment-btn" data-equipment-id="${equipment.id}">Remove</button>
+          ${equipment.type === 'SWITCH' ? `<button class="manage-cables-btn" data-equipment-id="${equipment.id}">Manage Cables</button>` : ''}
+        </div>
+      `).join('');
+      
+      contentContainer.innerHTML = `
+        <h3>Network Equipment (${rack.networkEquipment.length})</h3>
+        <div class="equipment-list">
+          ${equipmentList}
+        </div>
+        <button id="add-network-btn" style="margin-top: 20px;">Add Network Equipment</button>
+      `;
+      
+      // Add event listeners
+      document.querySelectorAll('.remove-equipment-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const equipmentId = btn.dataset.equipmentId;
+          if (confirm('Are you sure you want to remove this equipment?')) {
+            rack.removeNetworkEquipment(equipmentId);
+            showNetworkTab(); // Refresh the tab
+          }
+        });
+      });
+      
+      document.querySelectorAll('.manage-cables-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          // Enable cable management mode
+          this.closeModal();
+          this.game.toggleCableMode(true);
+        });
+      });
+      
+      document.getElementById('add-network-btn')?.addEventListener('click', () => {
+        this.showReceivingDockUI();
+      });
+    };
+    
+    // Open the modal
+    this.openModal(modalContent);
+    
+    // Show overview by default
+    showRackOverview();
+    
+    // Tab click handlers
+    overviewTab.addEventListener('click', () => {
+      overviewTab.classList.add('active');
+      overviewTab.style.backgroundColor = '#d4d0c8';
+      serversTab.classList.remove('active');
+      serversTab.style.backgroundColor = '#bbb';
+      networkTab.classList.remove('active');
+      networkTab.style.backgroundColor = '#bbb';
+      showRackOverview();
+    });
+    
+    serversTab.addEventListener('click', () => {
+      serversTab.classList.add('active');
+      serversTab.style.backgroundColor = '#d4d0c8';
+      overviewTab.classList.remove('active');
+      overviewTab.style.backgroundColor = '#bbb';
+      networkTab.classList.remove('active');
+      networkTab.style.backgroundColor = '#bbb';
+      showServersTab();
+    });
+    
+    networkTab.addEventListener('click', () => {
+      networkTab.classList.add('active');
+      networkTab.style.backgroundColor = '#d4d0c8';
+      overviewTab.classList.remove('active');
+      overviewTab.style.backgroundColor = '#bbb';
+      serversTab.classList.remove('active');
+      serversTab.style.backgroundColor = '#bbb';
+      showNetworkTab();
+    });
+  }
+  
+  // Show egress router and circuit details
+  showEgressRouterView(egressRouter) {
+    console.log("Showing egress router view for:", egressRouter);
+    
+    // Create modal content for the egress router view
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    modalContent.style.width = '800px';
+    modalContent.style.maxWidth = '90%';
+    
+    // Add close button
+    const closeButton = document.createElement('div');
+    closeButton.className = 'modal-close';
+    closeButton.innerHTML = '&times;';
+    closeButton.addEventListener('click', () => this.closeModal());
+    modalContent.appendChild(closeButton);
+    
+    // Add title
+    const title = document.createElement('h2');
+    title.textContent = 'Egress Router';
+    modalContent.appendChild(title);
+    
+    // Create content container
+    const contentContainer = document.createElement('div');
+    modalContent.appendChild(contentContainer);
+    
+    // Show router details and circuits
+    const routerInfo = `
+      <div style="margin-bottom: 20px;">
+        <h3>Router Details</h3>
+        <p><strong>Name:</strong> ${egressRouter.name}</p>
+        <p><strong>Position:</strong> (${egressRouter.position.x}, ${egressRouter.position.z})</p>
+        <p><strong>Total Circuits:</strong> ${egressRouter.circuits.length}</p>
+      </div>
+    `;
+    
+    let circuitsList = '';
+    if (egressRouter.circuits.length === 0) {
+      circuitsList = `
+        <div style="margin-bottom: 20px;">
+          <h3>Circuits</h3>
+          <p>No circuits installed. Add a circuit to provide internet connectivity.</p>
+        </div>
+      `;
+    } else {
+      circuitsList = `
+        <div style="margin-bottom: 20px;">
+          <h3>Circuits</h3>
+          <div class="circuits-list">
+            ${egressRouter.circuits.map(circuit => `
+              <div class="circuit-item" style="border: 1px solid #999; padding: 10px; margin-bottom: 10px; border-radius: 3px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <h4 style="margin: 0;">${circuit.name}</h4>
+                  <span>${circuit.status.toUpperCase()}</span>
+                </div>
+                <p><strong>Type:</strong> ${circuit.type}</p>
+                <p><strong>Speed:</strong> ${circuit.speed} Gbps</p>
+                <p><strong>Cost:</strong> $${circuit.cost}/month</p>
+                <p><strong>Utilization:</strong> ${Math.round(circuit.utilization)}%</p>
+                <p><strong>Connections:</strong> ${circuit.connections.length} / ${circuit.specs.maxConnections}</p>
+                <p><strong>IP Range:</strong> ${circuit.ipRange.network}</p>
+                <div style="margin-top: 10px;">
+                  <button class="connect-rack-btn" data-circuit-id="${circuit.id}">Connect Rack</button>
+                  <button class="remove-circuit-btn" data-circuit-id="${circuit.id}">Remove Circuit</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+    
+    contentContainer.innerHTML = `
+      ${routerInfo}
+      ${circuitsList}
+      <div style="margin-top: 20px;">
+        <button id="add-circuit-btn">Add Circuit</button>
+      </div>
+    `;
+    
+    // Open the modal
+    this.openModal(modalContent);
+    
+    // Add event listeners
+    document.getElementById('add-circuit-btn')?.addEventListener('click', () => {
+      this.showCircuitPurchaseUI();
+    });
+    
+    document.querySelectorAll('.connect-rack-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const circuitId = btn.dataset.circuitId;
+        const circuit = egressRouter.circuits.find(c => c.id === circuitId);
+        if (circuit) {
+          this.showConnectRackUI(circuit);
+        }
+      });
+    });
+    
+    document.querySelectorAll('.remove-circuit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const circuitId = btn.dataset.circuitId;
+        if (confirm('Are you sure you want to remove this circuit? All connections will be lost!')) {
+          egressRouter.removeCircuit(circuitId);
+          this.showEgressRouterView(egressRouter);
+        }
+      });
+    });
+  }
+  
+  // Show circuit details view
+  showCircuitView(circuit) {
+    console.log("Showing circuit view for:", circuit);
+    
+    // Create modal content
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    modalContent.style.width = '800px';
+    modalContent.style.maxWidth = '90%';
+    
+    // Add close button
+    const closeButton = document.createElement('div');
+    closeButton.className = 'modal-close';
+    closeButton.innerHTML = '&times;';
+    closeButton.addEventListener('click', () => this.closeModal());
+    modalContent.appendChild(closeButton);
+    
+    // Add title
+    const title = document.createElement('h2');
+    title.textContent = circuit.name;
+    modalContent.appendChild(title);
+    
+    // Create circuit details
+    const circuitDetails = `
+      <div style="margin-bottom: 20px;">
+        <h3>Circuit Details</h3>
+        <p><strong>Type:</strong> ${circuit.type}</p>
+        <p><strong>Speed:</strong> ${circuit.speed} Gbps</p>
+        <p><strong>Cost:</strong> $${circuit.cost}/month</p>
+        <p><strong>Status:</strong> ${circuit.status.toUpperCase()}</p>
+        <p><strong>Utilization:</strong> ${Math.round(circuit.utilization)}%</p>
+        <p><strong>IP Range:</strong> ${circuit.ipRange.network}</p>
+      </div>
+    `;
+    
+    let connectionsList = '';
+    if (circuit.connections.length === 0) {
+      connectionsList = `
+        <div style="margin-bottom: 20px;">
+          <h3>Connections</h3>
+          <p>No devices connected to this circuit.</p>
+        </div>
+      `;
+    } else {
+      connectionsList = `
+        <div style="margin-bottom: 20px;">
+          <h3>Connections (${circuit.connections.length} / ${circuit.specs.maxConnections})</h3>
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr>
+                <th style="text-align: left; padding: 8px; border-bottom: 1px solid #999;">Device</th>
+                <th style="text-align: left; padding: 8px; border-bottom: 1px solid #999;">Port</th>
+                <th style="text-align: left; padding: 8px; border-bottom: 1px solid #999;">IP Address</th>
+                <th style="text-align: center; padding: 8px; border-bottom: 1px solid #999;">Status</th>
+                <th style="text-align: center; padding: 8px; border-bottom: 1px solid #999;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${circuit.connections.map(conn => {
+                const equipment = this.game.findEquipmentById(conn.equipmentId);
+                return `
+                  <tr>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${equipment ? equipment.name : 'Unknown Device'}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee;">Port ${conn.portId}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${conn.ipAddress || 'None'}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${conn.status}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">
+                      <button class="disconnect-btn" data-equipment-id="${conn.equipmentId}" data-port-id="${conn.portId}">Disconnect</button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+    
+    const ipAddressesList = `
+      <div style="margin-bottom: 20px;">
+        <h3>IP Addresses</h3>
+        <p><strong>Network:</strong> ${circuit.ipRange.network}</p>
+        <p><strong>Gateway:</strong> ${circuit.ipRange.gateway}</p>
+        <p><strong>Usable Range:</strong> ${circuit.ipRange.usable}</p>
+        <p><strong>Broadcast:</strong> ${circuit.ipRange.broadcast}</p>
+        
+        <h4>Allocated IP Addresses</h4>
+        ${Object.keys(circuit.ipRange.allocatedIps).length === 0 
+          ? '<p>No IP addresses allocated yet.</p>' 
+          : `
+            <table style="width: 100%; border-collapse: collapse;">
+              <thead>
+                <tr>
+                  <th style="text-align: left; padding: 8px; border-bottom: 1px solid #999;">Device</th>
+                  <th style="text-align: left; padding: 8px; border-bottom: 1px solid #999;">IP Address</th>
+                  <th style="text-align: left; padding: 8px; border-bottom: 1px solid #999;">Allocated</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${Object.keys(circuit.ipRange.allocatedIps).map(deviceId => {
+                  const ip = circuit.ipRange.allocatedIps[deviceId];
+                  return `
+                    <tr>
+                      <td style="padding: 8px; border-bottom: 1px solid #eee;">${ip.name || deviceId}</td>
+                      <td style="padding: 8px; border-bottom: 1px solid #eee;">${ip.ip}</td>
+                      <td style="padding: 8px; border-bottom: 1px solid #eee;">${new Date(ip.allocated).toLocaleString()}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          `
+        }
+      </div>
+    `;
+    
+    const content = document.createElement('div');
+    content.innerHTML = `
+      ${circuitDetails}
+      ${connectionsList}
+      ${ipAddressesList}
+      <div style="margin-top: 20px;">
+        <button id="connect-rack-btn">Connect Rack</button>
+        <button id="remove-circuit-btn">Remove Circuit</button>
+        <button id="back-to-router-btn">Back to Egress Router</button>
+      </div>
+    `;
+    
+    modalContent.appendChild(content);
+    
+    // Open the modal
+    this.openModal(modalContent);
+    
+    // Add event listeners
+    document.getElementById('connect-rack-btn')?.addEventListener('click', () => {
+      this.showConnectRackUI(circuit);
+    });
+    
+    document.getElementById('remove-circuit-btn')?.addEventListener('click', () => {
+      if (confirm('Are you sure you want to remove this circuit? All connections will be lost!')) {
+        this.game.datacenter.egressRouter.removeCircuit(circuit.id);
+        this.showEgressRouterView(this.game.datacenter.egressRouter);
+      }
+    });
+    
+    document.getElementById('back-to-router-btn')?.addEventListener('click', () => {
+      this.showEgressRouterView(this.game.datacenter.egressRouter);
+    });
+    
+    document.querySelectorAll('.disconnect-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const equipmentId = btn.dataset.equipmentId;
+        const portId = btn.dataset.portId;
+        
+        // Find the rack containing this equipment
+        let rack = null;
+        for (const r of this.game.datacenter.racks) {
+          const equipment = r.findEquipmentById(equipmentId);
+          if (equipment) {
+            rack = r;
+            break;
+          }
+        }
+        
+        if (rack) {
+          if (confirm('Are you sure you want to disconnect this connection?')) {
+            this.game.datacenter.egressRouter.disconnectRackFromCircuit(
+              rack,
+              circuit.id,
+              equipmentId,
+              portId
+            );
+            this.showCircuitView(circuit);
+          }
+        } else {
+          alert('Could not find the rack containing this equipment.');
+        }
+      });
+    });
+  }
+  
+  // Show receiving dock UI with inventory and purchase options
+  showReceivingDockUI() {
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    modalContent.style.width = '800px';
+    modalContent.style.maxWidth = '90%';
+    
+    // Add close button
+    const closeButton = document.createElement('div');
+    closeButton.className = 'modal-close';
+    closeButton.innerHTML = '&times;';
+    closeButton.addEventListener('click', () => this.closeModal());
+    modalContent.appendChild(closeButton);
+    
+    // Add title
+    const title = document.createElement('h2');
+    title.textContent = 'Receiving Dock';
+    modalContent.appendChild(title);
+    
+    // Create tabs container for Windows 2000 style tabs
+    const tabContainer = document.createElement('div');
+    tabContainer.className = 'tab-container';
+    tabContainer.style.display = 'flex';
+    tabContainer.style.borderBottom = '1px solid #999';
+    tabContainer.style.marginBottom = '15px';
+    
+    // Inventory tab
+    const inventoryTab = document.createElement('div');
+    inventoryTab.className = 'tab active';
+    inventoryTab.textContent = 'Inventory';
+    inventoryTab.style.padding = '8px 15px';
+    inventoryTab.style.backgroundColor = '#d4d0c8';
+    inventoryTab.style.border = '1px solid #999';
+    inventoryTab.style.borderBottom = 'none';
+    inventoryTab.style.marginRight = '5px';
+    inventoryTab.style.cursor = 'pointer';
+    inventoryTab.style.borderTopLeftRadius = '4px';
+    inventoryTab.style.borderTopRightRadius = '4px';
+    
+    // Purchase tab
+    const purchaseTab = document.createElement('div');
+    purchaseTab.className = 'tab';
+    purchaseTab.textContent = 'Purchase Equipment';
+    purchaseTab.style.padding = '8px 15px';
+    purchaseTab.style.backgroundColor = '#bbb';
+    purchaseTab.style.border = '1px solid #999';
+    purchaseTab.style.borderBottom = 'none';
+    purchaseTab.style.cursor = 'pointer';
+    purchaseTab.style.borderTopLeftRadius = '4px';
+    purchaseTab.style.borderTopRightRadius = '4px';
+    
+    tabContainer.appendChild(inventoryTab);
+    tabContainer.appendChild(purchaseTab);
+    modalContent.appendChild(tabContainer);
+    
+    // Content container
+    const contentContainer = document.createElement('div');
+    contentContainer.className = 'tab-content-container';
+    modalContent.appendChild(contentContainer);
+    
+    // Open the modal
+    this.openModal(modalContent);
+    
+    // Show inventory by default
+    this.showDockInventory(contentContainer);
+    
+    // Tab click handlers
+    inventoryTab.addEventListener('click', () => {
+      inventoryTab.classList.add('active');
+      inventoryTab.style.backgroundColor = '#d4d0c8';
+      purchaseTab.classList.remove('active');
+      purchaseTab.style.backgroundColor = '#bbb';
+      this.showDockInventory(contentContainer);
+    });
+    
+    purchaseTab.addEventListener('click', () => {
+      purchaseTab.classList.add('active');
+      purchaseTab.style.backgroundColor = '#d4d0c8';
+      inventoryTab.classList.remove('active');
+      inventoryTab.style.backgroundColor = '#bbb';
+      this.showDockPurchase(contentContainer);
+    });
+  }
+  
+  // Show the inventory of equipment in the receiving dock
+  showDockInventory(container) {
+    const inventory = this.game.datacenter.getReceivingDockInventory();
+    
+    container.innerHTML = '<h3>Equipment Inventory</h3>';
+    
+    if (inventory.length === 0) {
+      container.innerHTML += '<p>No equipment in inventory. Switch to the Purchase tab to order equipment.</p>';
+      return;
+    }
+    
+    // Group inventory by type
+    const groupedInventory = {};
+    inventory.forEach(item => {
+      if (!groupedInventory[item.type]) {
+        groupedInventory[item.type] = [];
+      }
+      groupedInventory[item.type].push(item);
+    });
+    
+    // Create inventory sections for each type
+    Object.keys(groupedInventory).forEach(type => {
+      const items = groupedInventory[type];
+      const sectionTitle = document.createElement('h4');
+      sectionTitle.textContent = this.formatEquipmentType(type);
+      sectionTitle.style.marginBottom = '10px';
+      sectionTitle.style.marginTop = '20px';
+      container.appendChild(sectionTitle);
+      
+      const itemsTable = document.createElement('table');
+      itemsTable.style.width = '100%';
+      itemsTable.style.borderCollapse = 'collapse';
+      
+      // Create table header
+      const tableHeader = document.createElement('thead');
+      tableHeader.innerHTML = `
+        <tr>
+          <th style="text-align: left; padding: 8px; border-bottom: 1px solid #999;">Specifications</th>
+          <th style="text-align: right; padding: 8px; border-bottom: 1px solid #999;">Original Cost</th>
+          <th style="text-align: right; padding: 8px; border-bottom: 1px solid #999;">Selling Value</th>
+          <th style="text-align: center; padding: 8px; border-bottom: 1px solid #999;">Actions</th>
+        </tr>
+      `;
+      itemsTable.appendChild(tableHeader);
+      
+      // Create table body
+      const tableBody = document.createElement('tbody');
+      items.forEach(item => {
+        const row = document.createElement('tr');
+        row.style.cursor = 'pointer';
+        
+        // Specifications column
+        const specsCell = document.createElement('td');
+        specsCell.style.padding = '8px';
+        specsCell.style.borderBottom = '1px solid #eee';
+        specsCell.innerHTML = this.formatEquipmentSpecs(item);
+        row.appendChild(specsCell);
+        
+        // Original cost column
+        const costCell = document.createElement('td');
+        costCell.style.padding = '8px';
+        costCell.style.borderBottom = '1px solid #eee';
+        costCell.style.textAlign = 'right';
+        costCell.textContent = `$${item.originalCost}`;
+        row.appendChild(costCell);
+        
+        // Selling value column
+        const valueCell = document.createElement('td');
+        valueCell.style.padding = '8px';
+        valueCell.style.borderBottom = '1px solid #eee';
+        valueCell.style.textAlign = 'right';
+        valueCell.textContent = `$${item.sellingValue}`;
+        row.appendChild(valueCell);
+        
+        // Actions column
+        const actionsCell = document.createElement('td');
+        actionsCell.style.padding = '8px';
+        actionsCell.style.borderBottom = '1px solid #eee';
+        actionsCell.style.textAlign = 'center';
+        
+        // Install button
+        const installBtn = document.createElement('button');
+        installBtn.textContent = 'Install';
+        installBtn.style.marginRight = '5px';
+        installBtn.addEventListener('click', () => {
+          this.showInstallEquipmentUI(item);
+        });
+        
+        // Sell button
+        const sellBtn = document.createElement('button');
+        sellBtn.textContent = 'Sell';
+        sellBtn.addEventListener('click', () => {
+          this.sellDockEquipment(item);
+        });
+        
+        actionsCell.appendChild(installBtn);
+        actionsCell.appendChild(sellBtn);
+        row.appendChild(actionsCell);
+        
+        tableBody.appendChild(row);
+      });
+      
+      itemsTable.appendChild(tableBody);
+      container.appendChild(itemsTable);
+    });
+  }
+  
+  // Show equipment purchase options
+  showDockPurchase(container) {
+    container.innerHTML = `
+      <h3>Purchase Equipment</h3>
+      <p>Select a category of equipment to purchase:</p>
+      <div class="purchase-options" style="display: flex; flex-wrap: wrap; gap: 15px; margin-top: 20px;">
+        <div class="purchase-option" style="border: 1px solid #999; border-radius: 5px; padding: 15px; min-width: 200px; cursor: pointer;">
+          <h4>Servers</h4>
+          <p>Purchase servers to add to your racks</p>
+          <button id="purchase-server-btn">Browse Servers</button>
+        </div>
+        
+        <div class="purchase-option" style="border: 1px solid #999; border-radius: 5px; padding: 15px; min-width: 200px; cursor: pointer;">
+          <h4>Network Equipment</h4>
+          <p>Purchase switches, routers, etc.</p>
+          <button id="purchase-network-btn">Browse Network Equipment</button>
+        </div>
+        
+        <div class="purchase-option" style="border: 1px solid #999; border-radius: 5px; padding: 15px; min-width: 200px; cursor: pointer;">
+          <h4>Internet Circuits</h4>
+          <p>Purchase internet connectivity</p>
+          <button id="purchase-circuit-btn">Browse Circuits</button>
+        </div>
+      </div>
+    `;
+    
+    // Add event listeners
+    document.getElementById('purchase-server-btn').addEventListener('click', () => {
+      this.showServerPurchaseUI();
+    });
+    
+    document.getElementById('purchase-network-btn').addEventListener('click', () => {
+      this.showNetworkEquipmentPurchaseUI();
+    });
+    
+    document.getElementById('purchase-circuit-btn').addEventListener('click', () => {
+      this.showCircuitPurchaseUI();
+    });
+  }
+  
+  // Format equipment type for display
+  formatEquipmentType(type) {
+    const typeMap = {
+      'server': 'Servers',
+      'switch': 'Network Switches',
+      'router': 'Routers',
+      'firewall': 'Firewalls',
+      'patch_panel': 'Patch Panels'
+    };
+    
+    return typeMap[type.toLowerCase()] || type;
+  }
+  
+  // Format equipment specs for display
+  formatEquipmentSpecs(item) {
+    let specs = '';
+    
+    switch (item.type.toLowerCase()) {
+      case 'server':
+        specs = `
+          <div>
+            <strong>${item.specs.name || 'Server'}</strong><br>
+            ${item.specs.cpu ? `CPU: ${item.specs.cpu.cores} cores @ ${item.specs.cpu.speed} GHz<br>` : ''}
+            ${item.specs.ram ? `RAM: ${item.specs.ram} GB<br>` : ''}
+            ${item.specs.storage ? `Storage: ${item.specs.storage.map(s => `${s.size} GB ${s.type}`).join(', ')}<br>` : ''}
+            ${item.specs.unitSize ? `Size: ${item.specs.unitSize}U` : ''}
+          </div>
+        `;
+        break;
+        
+      case 'switch':
+        specs = `
+          <div>
+            <strong>${item.specs.name || 'Switch'}</strong><br>
+            Ports: ${item.specs.numPorts} × ${item.specs.portSpeed} Gbps ${item.specs.portType}<br>
+            ${item.specs.unitSize ? `Size: ${item.specs.unitSize}U` : ''}
+          </div>
+        `;
+        break;
+        
+      case 'router':
+        specs = `
+          <div>
+            <strong>${item.specs.name || 'Router'}</strong><br>
+            Ports: ${item.specs.numPorts} × ${item.specs.portSpeed} Gbps<br>
+            ${item.specs.unitSize ? `Size: ${item.specs.unitSize}U` : ''}
+          </div>
+        `;
+        break;
+        
+      case 'firewall':
+        specs = `
+          <div>
+            <strong>${item.specs.name || 'Firewall'}</strong><br>
+            Throughput: ${item.specs.throughput} Gbps<br>
+            ${item.specs.unitSize ? `Size: ${item.specs.unitSize}U` : ''}
+          </div>
+        `;
+        break;
+        
+      default:
+        specs = `<div><strong>${item.specs.name || item.type}</strong></div>`;
+    }
+    
+    return specs;
+  }
+  
+  // Sell equipment from the dock
+  sellDockEquipment(item) {
+    if (confirm(`Are you sure you want to sell this ${item.type} for $${item.sellingValue}?`)) {
+      const success = this.game.datacenter.sellEquipmentFromDock(item.id);
+      
+      if (success) {
+        alert(`Successfully sold ${item.type} for $${item.sellingValue}`);
+        this.showReceivingDockUI(); // Refresh the dock UI
+      } else {
+        alert('Error selling equipment');
+      }
+    }
+  }
+  
+  // Show UI for installing equipment to a rack
+  showInstallEquipmentUI(item) {
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    
+    // Add close button
+    const closeButton = document.createElement('div');
+    closeButton.className = 'modal-close';
+    closeButton.innerHTML = '&times;';
+    closeButton.addEventListener('click', () => this.closeModal());
+    modalContent.appendChild(closeButton);
+    
+    // Add title
+    const title = document.createElement('h2');
+    title.textContent = `Install ${item.type}`;
+    modalContent.appendChild(title);
+    
+    // Get available racks
+    const racks = this.game.datacenter.racks;
+    
+    if (racks.length === 0) {
+      const content = document.createElement('div');
+      content.innerHTML = '<p>No racks available. Please add a rack first.</p>';
+      content.innerHTML += '<button id="back-to-inventory-btn">Back to Inventory</button>';
+      modalContent.appendChild(content);
+      
+      this.openModal(modalContent);
+      
+      document.getElementById('back-to-inventory-btn').addEventListener('click', () => {
+        this.showReceivingDockUI();
+      });
+      
+      return;
+    }
+    
+    // Create rack options
+    let rackOptions = '';
+    racks.forEach(rack => {
+      rackOptions += `<option value="${rack.id}">Rack at (${rack.gridX}, ${rack.gridZ})</option>`;
+    });
+    
+    const content = document.createElement('div');
+    content.innerHTML = `
+      <p>Select a rack and position to install this equipment:</p>
+      
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label for="rack-select">Select Rack:</label>
+        <select id="rack-select">
+          ${rackOptions}
+        </select>
+      </div>
+      
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label for="position-select">Select Position:</label>
+        <select id="position-select"></select>
+      </div>
+      
+      <div style="margin-top: 20px;">
+        <button id="install-confirm-btn">Install</button>
+        <button id="back-to-inventory-btn">Cancel</button>
+      </div>
+    `;
+    
+    modalContent.appendChild(content);
+    this.openModal(modalContent);
+    
+    // Handle rack selection to update available positions
+    const rackSelect = document.getElementById('rack-select');
+    const positionSelect = document.getElementById('position-select');
+    
+    // Function to update available positions
+    const updatePositions = () => {
+      const selectedRackId = rackSelect.value;
+      const rack = this.game.datacenter.racks.find(r => r.id === selectedRackId);
+      
+      if (!rack) {
+        console.error('Selected rack not found:', selectedRackId);
+        return;
+      }
+      
+      console.log(`Updating positions for rack ${rack.id}. Equipment size: ${item.specs.unitSize}U`);
+      console.log(`Rack properties: rackHeightUnits=${rack.rackHeightUnits}, servers=${rack.servers.length}, networkEquipment=${rack.networkEquipment.length}`);
+      
+      // Clear existing options
+      positionSelect.innerHTML = '';
+      
+      // Get required rack units
+      const requiredUnits = item.specs.unitSize || 1;
+      
+      // Find available positions
+      const occupiedPositions = [];
+      
+      // Mark positions occupied by servers
+      rack.servers.forEach(server => {
+        for (let i = 0; i < server.unitSize; i++) {
+          occupiedPositions.push(server.position + i);
+        }
+      });
+      
+      // Mark positions occupied by network equipment
+      rack.networkEquipment.forEach(eq => {
+        for (let i = 0; i < eq.unitSize; i++) {
+          occupiedPositions.push(eq.position + i);
+        }
+      });
+      
+      // Generate options for available positions
+      for (let i = 0; i <= rack.rackHeightUnits - requiredUnits; i++) {
+        // Check if this position has enough consecutive space
+        let hasSpace = true;
+        for (let j = 0; j < requiredUnits; j++) {
+          if (occupiedPositions.includes(i + j)) {
+            hasSpace = false;
+            break;
+          }
+        }
+        
+        if (hasSpace) {
+          const option = document.createElement('option');
+          option.value = i;
+          option.textContent = `Position ${i + 1} (${requiredUnits}U)`;
+          positionSelect.appendChild(option);
+        }
+      }
+      
+      // If no positions available
+      if (positionSelect.options.length === 0) {
+        console.log(`No available positions found for equipment with size ${requiredUnits}U in rack ${rack.id}. Rack has ${rack.rackHeightUnits} units total.`);
+        
+        const option = document.createElement('option');
+        option.textContent = 'No available positions';
+        option.disabled = true;
+        positionSelect.appendChild(option);
+        document.getElementById('install-confirm-btn').disabled = true;
+      } else {
+        console.log(`Found ${positionSelect.options.length} available positions for equipment with size ${requiredUnits}U in rack ${rack.id}`);
+        document.getElementById('install-confirm-btn').disabled = false;
+      }
+    };
+    
+    // Update positions when rack is selected
+    rackSelect.addEventListener('change', updatePositions);
+    
+    // Initial update
+    updatePositions();
+    
+    // Handle install button
+    document.getElementById('install-confirm-btn').addEventListener('click', () => {
+      const selectedRackId = rackSelect.value;
+      const selectedPosition = parseInt(positionSelect.value);
+      
+      if (selectedRackId && !isNaN(selectedPosition)) {
+        this.installEquipmentToRack(item, selectedRackId, selectedPosition);
+      }
+    });
+    
+    // Handle cancel button
+    document.getElementById('back-to-inventory-btn').addEventListener('click', () => {
+      this.showReceivingDockUI();
+    });
+  }
+  
+  // Install equipment from dock to rack
+  installEquipmentToRack(item, rackId, position) {
+    let success = false;
+    
+    if (item.type.toLowerCase() === 'server') {
+      success = !!this.game.datacenter.installServerFromDock(item.id, rackId, position);
+    } else {
+      // Assume it's network equipment
+      success = !!this.game.datacenter.installNetworkEquipmentFromDock(item.id, rackId, position);
+    }
+    
+    if (success) {
+      alert(`Successfully installed ${item.type} in rack`);
+      
+      // Show the rack view
+      const rack = this.game.datacenter.racks.find(r => r.id === rackId);
+      if (rack) {
+        this.showRackView(rack);
+      } else {
+        this.showReceivingDockUI();
+      }
+    } else {
+      alert(`Failed to install ${item.type}. Please try again.`);
+      this.showReceivingDockUI();
+    }
+  }
+  
+  // Show UI for purchasing servers
+  showServerPurchaseUI() {
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    modalContent.style.width = '800px';
+    modalContent.style.maxWidth = '90%';
+    
+    // Add close button
+    const closeButton = document.createElement('div');
+    closeButton.className = 'modal-close';
+    closeButton.innerHTML = '&times;';
+    closeButton.addEventListener('click', () => this.closeModal());
+    modalContent.appendChild(closeButton);
+    
+    // Add title
+    const title = document.createElement('h2');
+    title.textContent = 'Purchase Servers';
+    modalContent.appendChild(title);
+    
+    // Define server options
+    const serverOptions = [
+      {
+        name: 'Budget Server',
+        cost: 500,
+        specs: {
+          name: 'Economy 1U Server',
+          unitSize: 1,
+          cpu: { cores: 4, speed: 2.2 },
+          ram: 8,
+          storage: [{ type: 'HDD', size: 500 }],
+          networkCards: [{ speed: 1 }],
+          powerConsumption: 300,
+          revenue: 10
+        }
+      },
+      {
+        name: 'Standard Server',
+        cost: 1200,
+        specs: {
+          name: 'Standard 1U Server',
+          unitSize: 1,
+          cpu: { cores: 8, speed: 2.8 },
+          ram: 16,
+          storage: [{ type: 'SSD', size: 256 }, { type: 'HDD', size: 1000 }],
+          networkCards: [{ speed: 10 }],
+          powerConsumption: 400,
+          revenue: 25
+        }
+      },
+      {
+        name: 'Performance Server',
+        cost: 2500,
+        specs: {
+          name: 'Performance 2U Server',
+          unitSize: 2,
+          cpu: { cores: 16, speed: 3.2 },
+          ram: 64,
+          storage: [{ type: 'SSD', size: 512 }, { type: 'HDD', size: 2000 }],
+          networkCards: [{ speed: 10 }, { speed: 10 }],
+          powerConsumption: 650,
+          revenue: 60
+        }
+      },
+      {
+        name: 'High-End Server',
+        cost: 5000,
+        specs: {
+          name: 'Enterprise 4U Server',
+          unitSize: 4,
+          cpu: { cores: 32, speed: 3.5 },
+          ram: 128,
+          storage: [{ type: 'SSD', size: 1000 }, { type: 'SSD', size: 1000 }, { type: 'HDD', size: 4000 }],
+          networkCards: [{ speed: 25 }, { speed: 25 }],
+          powerConsumption: 900,
+          revenue: 120
+        }
+      }
+    ];
+    
+    // Create server options HTML
+    const serverOptionsHtml = serverOptions.map(server => `
+      <div class="server-option" data-name="${server.name}" style="border: 1px solid #999; border-radius: 5px; padding: 15px; margin-bottom: 15px; cursor: pointer;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h4 style="margin: 0;">${server.name}</h4>
+          <span style="font-weight: bold;">$${server.cost}</span>
+        </div>
+        <p><strong>Size:</strong> ${server.specs.unitSize}U</p>
+        <p><strong>CPU:</strong> ${server.specs.cpu.cores} cores @ ${server.specs.cpu.speed} GHz</p>
+        <p><strong>RAM:</strong> ${server.specs.ram} GB</p>
+        <p><strong>Storage:</strong> ${server.specs.storage.map(s => `${s.size} GB ${s.type}`).join(', ')}</p>
+        <p><strong>Network:</strong> ${server.specs.networkCards.map(n => `${n.speed} Gbps`).join(', ')}</p>
+        <p><strong>Power:</strong> ${server.specs.powerConsumption} W</p>
+        <p><strong>Revenue:</strong> $${server.specs.revenue}/hour</p>
+        <button class="purchase-server-btn" data-server="${server.name}">Purchase</button>
+      </div>
+    `).join('');
+    
+    const content = document.createElement('div');
+    content.innerHTML = `
+      <p>Select a server to purchase:</p>
+      <div class="server-options">
+        ${serverOptionsHtml}
+      </div>
+      <button id="back-to-purchase-btn" style="margin-top: 20px;">Back to Purchase Menu</button>
+    `;
+    
+    modalContent.appendChild(content);
+    this.openModal(modalContent);
+    
+    // Add event listeners for purchase buttons
+    const purchaseButtons = document.querySelectorAll('.purchase-server-btn');
+    purchaseButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        const serverName = button.dataset.server;
+        const server = serverOptions.find(s => s.name === serverName);
+        
+        if (server) {
+          if (this.game.datacenter.funds < server.cost) {
+            alert('Not enough funds to purchase this server.');
+            return;
+          }
+          
+          // Add to receiving dock
+          const item = this.game.datacenter.addEquipmentToReceivingDock('server', server.specs, server.cost);
+          
+          if (item) {
+            alert(`Successfully purchased ${server.name} for $${server.cost}. It has been delivered to your receiving dock.`);
+            this.showReceivingDockUI();
+          } else {
+            alert('Failed to purchase server.');
+          }
+        }
+      });
+    });
+    
+    // Back button
+    document.getElementById('back-to-purchase-btn').addEventListener('click', () => {
+      this.showReceivingDockUI();
+    });
+  }
+  
+  // Show UI for purchasing network equipment
+  showNetworkEquipmentPurchaseUI() {
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    modalContent.style.width = '800px';
+    modalContent.style.maxWidth = '90%';
+    
+    // Add close button
+    const closeButton = document.createElement('div');
+    closeButton.className = 'modal-close';
+    closeButton.innerHTML = '&times;';
+    closeButton.addEventListener('click', () => this.closeModal());
+    modalContent.appendChild(closeButton);
+    
+    // Add title
+    const title = document.createElement('h2');
+    title.textContent = 'Purchase Network Equipment';
+    modalContent.appendChild(title);
+    
+    // Define equipment options
+    const equipmentOptions = [
+      {
+        name: 'Basic Switch',
+        type: 'switch',
+        cost: 300,
+        specs: {
+          name: 'Basic 8-Port Switch',
+          unitSize: 1,
+          numPorts: 8,
+          portSpeed: 1,
+          portType: 'ethernet',
+          capabilities: ['vlan'],
+          powerConsumption: 50
+        }
+      },
+      {
+        name: 'Standard Switch',
+        type: 'switch',
+        cost: 800,
+        specs: {
+          name: 'Standard 24-Port Switch',
+          unitSize: 1,
+          numPorts: 24,
+          portSpeed: 1,
+          portType: 'ethernet',
+          capabilities: ['vlan', 'qos'],
+          powerConsumption: 80
+        }
+      },
+      {
+        name: 'Enterprise Switch',
+        type: 'switch',
+        cost: 2200,
+        specs: {
+          name: 'Enterprise 48-Port Switch',
+          unitSize: 1,
+          numPorts: 48,
+          portSpeed: 10,
+          portType: 'ethernet',
+          capabilities: ['vlan', 'qos', 'spanning-tree'],
+          powerConsumption: 150
+        }
+      },
+      {
+        name: 'Basic Firewall',
+        type: 'firewall',
+        cost: 500,
+        specs: {
+          name: 'Basic Firewall',
+          unitSize: 1,
+          numPorts: 4,
+          portSpeed: 1,
+          throughput: 1,
+          capabilities: ['stateful-inspection'],
+          powerConsumption: 60
+        }
+      },
+      {
+        name: 'Advanced Firewall',
+        type: 'firewall',
+        cost: 1500,
+        specs: {
+          name: 'Advanced Firewall',
+          unitSize: 1,
+          numPorts: 8,
+          portSpeed: 10,
+          throughput: 10,
+          capabilities: ['stateful-inspection', 'vpn', 'ids'],
+          powerConsumption: 120
+        }
+      }
+    ];
+    
+    // Create equipment options HTML
+    const equipmentOptionsHtml = equipmentOptions.map(equipment => `
+      <div class="equipment-option" data-name="${equipment.name}" style="border: 1px solid #999; border-radius: 5px; padding: 15px; margin-bottom: 15px; cursor: pointer;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h4 style="margin: 0;">${equipment.name}</h4>
+          <span style="font-weight: bold;">$${equipment.cost}</span>
+        </div>
+        <p><strong>Type:</strong> ${equipment.type}</p>
+        <p><strong>Size:</strong> ${equipment.specs.unitSize}U</p>
+        ${equipment.specs.numPorts ? `<p><strong>Ports:</strong> ${equipment.specs.numPorts} × ${equipment.specs.portSpeed} Gbps</p>` : ''}
+        ${equipment.specs.throughput ? `<p><strong>Throughput:</strong> ${equipment.specs.throughput} Gbps</p>` : ''}
+        <p><strong>Power:</strong> ${equipment.specs.powerConsumption} W</p>
+        <button class="purchase-equipment-btn" data-equipment="${equipment.name}">Purchase</button>
+      </div>
+    `).join('');
+    
+    const content = document.createElement('div');
+    content.innerHTML = `
+      <p>Select network equipment to purchase:</p>
+      <div class="equipment-options">
+        ${equipmentOptionsHtml}
+      </div>
+      <button id="back-to-purchase-btn" style="margin-top: 20px;">Back to Purchase Menu</button>
+    `;
+    
+    modalContent.appendChild(content);
+    this.openModal(modalContent);
+    
+    // Add event listeners for purchase buttons
+    const purchaseButtons = document.querySelectorAll('.purchase-equipment-btn');
+    purchaseButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        const equipmentName = button.dataset.equipment;
+        const equipment = equipmentOptions.find(e => e.name === equipmentName);
+        
+        if (equipment) {
+          if (this.game.datacenter.funds < equipment.cost) {
+            alert('Not enough funds to purchase this equipment.');
+            return;
+          }
+          
+          // Add to receiving dock
+          const item = this.game.datacenter.addEquipmentToReceivingDock(equipment.type, equipment.specs, equipment.cost);
+          
+          if (item) {
+            alert(`Successfully purchased ${equipment.name} for $${equipment.cost}. It has been delivered to your receiving dock.`);
+            this.showReceivingDockUI();
+          } else {
+            alert('Failed to purchase equipment.');
+          }
+        }
+      });
+    });
+    
+    // Back button
+    document.getElementById('back-to-purchase-btn').addEventListener('click', () => {
+      this.showReceivingDockUI();
     });
   }
 }
