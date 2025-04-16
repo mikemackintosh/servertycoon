@@ -554,20 +554,33 @@ export class Datacenter {
   }
   
   addRack(gridX, gridZ, isEmpty = false) {
-    // Before adding, check if position is available
+    // Make sure we're only using valid grid positions (no fractional positions)
+    gridX = Math.floor(gridX);
+    gridZ = Math.floor(gridZ);
+    
+    // Before adding, check if position is available and within grid boundaries
     if (!this.isGridPositionAvailable(gridX, gridZ)) {
-      console.error("Cannot add rack - position occupied");
+      console.error("Cannot add rack - position occupied or out of bounds");
       return null;
     }
     
+    // Calculate the X position at the center of the grid cell
     const posX = (gridX * this.cellSize) - (this.gridSize.width * this.cellSize / 2) + (this.cellSize / 2);
-    const posZ = (gridZ * this.cellSize) - (this.gridSize.height * this.cellSize / 2) + (this.cellSize / 2);
     
+    // For Z position, since racks take up 2 grid cells in depth, position them centered between the two cells
+    // The front edge of the rack will be at gridZ, and the back edge at gridZ+1
+    const frontZ = (gridZ * this.cellSize) - (this.gridSize.height * this.cellSize / 2) + (this.cellSize / 2);
+    const backZ = ((gridZ + 1) * this.cellSize) - (this.gridSize.height * this.cellSize / 2) + (this.cellSize / 2);
+    const posZ = (frontZ + backZ) / 2; // Center between the two grid cells
+    
+    // Create server rack and store grid position
     const rack = new ServerRack(this.game);
     rack.gridX = gridX;
-    rack.gridZ = gridZ;
+    rack.gridZ = gridZ; // This represents the FRONT of the rack
     rack.init(isEmpty); // Pass isEmpty flag to init
-    rack.container.position.set(posX, 0.25, posZ); // Positioned on top of the raised floor
+    
+    // Position exactly centered over the two grid cells, slightly above the raised floor
+    rack.container.position.set(posX, 0.25, posZ);
     
     // Store grid position and make draggable in userData
     rack.container.userData = {
@@ -619,26 +632,45 @@ export class Datacenter {
   
   // Check if a grid position is available for rack placement
   isGridPositionAvailable(gridX, gridZ, excludeRackId = null) {
-    // Check if position is within grid boundaries
+    // Check if the primary position is within grid boundaries
     if (gridX < 0 || gridX >= this.gridSize.width || gridZ < 0 || gridZ >= this.gridSize.height) {
       return false;
     }
     
-    // Simply check if this exact grid cell is occupied by another rack
-    // This allows racks to be placed immediately adjacent to each other
+    // Since racks are 2 grid cells deep (24"x48"), we need to check the cell behind it as well
+    // Each rack takes up [gridX, gridZ] and [gridX, gridZ+1]
+    // Check if the second position is within grid boundaries
+    if (gridZ + 1 >= this.gridSize.height) {
+      return false; // Not enough space for the depth of the rack
+    }
+    
+    // Check both grid cells the rack will occupy
     return !this.racks.some(rack => {
       if (excludeRackId && rack.container.userData.id === excludeRackId) {
         return false; // Skip the rack we're moving
       }
       
-      // Exact position match check - each grid cell is 24" x 24"
-      // which exactly matches our rack dimensions
-      return rack.gridX === gridX && rack.gridZ === gridZ;
+      // Check if this rack occupies either of the two grid cells we need
+      // Each rack occupies [rackX, rackZ] and [rackX, rackZ+1]
+      return (rack.gridX === gridX && rack.gridZ === gridZ) || 
+             (rack.gridX === gridX && rack.gridZ === gridZ + 1) || 
+             (rack.gridX === gridX && rack.gridZ + 1 === gridZ);
     });
   }
   
   // Move a rack to a new grid position
   moveRack(rack, newGridX, newGridZ) {
+    // Ensure grid positions are integers
+    newGridX = Math.floor(newGridX);
+    newGridZ = Math.floor(newGridZ);
+    
+    // Check grid bounds before moving
+    if (newGridX < 0 || newGridX >= this.gridSize.width || 
+        newGridZ < 0 || newGridZ >= this.gridSize.height) {
+      console.error(`Cannot move rack - out of bounds (${newGridX}, ${newGridZ})`);
+      return false;
+    }
+    
     // Get the rack ID to exclude in position check
     const rackId = rack.id || (rack.container && rack.container.userData && rack.container.userData.id);
     
@@ -667,9 +699,13 @@ export class Datacenter {
       });
     }
     
-    // Calculate world position
+    // Calculate X world position (center of the grid cell)
     const posX = (newGridX * this.cellSize) - (this.gridSize.width * this.cellSize / 2) + (this.cellSize / 2);
-    const posZ = (newGridZ * this.cellSize) - (this.gridSize.height * this.cellSize / 2) + (this.cellSize / 2);
+    
+    // For Z position, since racks take up 2 grid cells in depth, position them centered between the two cells
+    const frontZ = (newGridZ * this.cellSize) - (this.gridSize.height * this.cellSize / 2) + (this.cellSize / 2);
+    const backZ = ((newGridZ + 1) * this.cellSize) - (this.gridSize.height * this.cellSize / 2) + (this.cellSize / 2);
+    const posZ = (frontZ + backZ) / 2; // Center between the two grid cells
     
     // Move rack to new position
     rack.container.position.set(posX, 0.25, posZ);

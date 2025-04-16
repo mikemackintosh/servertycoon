@@ -11,8 +11,8 @@ export class ServerRack {
     this.rackHeight = 42; // 42U rack
     this.servers = [];
     this.networkEquipment = [];
-    this.rackWidth = 2; // 24 inches (2 feet) standard width
-    this.rackDepth = 4; // 48 inches (4 feet) - doubled the standard depth
+    this.rackWidth = 1.9; // 24 inches (2 feet) - slightly less than cell for margin
+    this.rackDepth = 3.9; // 48 inches (4 feet) - takes up 2 grid cells in depth
     this.rackHeightUnits = 42; // 42U standard rack
     
     // Movement properties
@@ -48,13 +48,17 @@ export class ServerRack {
   }
 
   createRackStructure() {
-    // Create rack body - now with doubled depth from standard rack
-    // Scaled to 95% of theoretical dimensions to leave small gap between racks
+    // Create rack body - 80s/90s style with visible frame
+    // Size as a 2x1 rectangle (24"x48") with a small margin
     const rackGeometry = new THREE.BoxGeometry(this.rackWidth * 0.95, this.rackHeight * 0.25, this.rackDepth * 0.95);
+    
+    // Create material with retro 80s/90s look - dark metallic with visible texture
     const rackMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x333333, // Dark gray
-      roughness: 0.7,
-      metalness: 0.5
+      color: 0x252525, // Dark gray with slight blue tint
+      roughness: 0.6,
+      metalness: 0.7,
+      emissive: 0x000066, // Subtle blue glow
+      emissiveIntensity: 0.2
     });
     
     const rack = new THREE.Mesh(rackGeometry, rackMaterial);
@@ -72,6 +76,36 @@ export class ServerRack {
       interactive: true
     };
     
+    // Add neon edge highlights - very 80s
+    const edgeGeometry = new THREE.EdgesGeometry(rackGeometry);
+    const edgeMaterial = new THREE.LineBasicMaterial({ 
+      color: 0xff00ff, // Bright magenta
+      transparent: true,
+      opacity: 0.8
+    });
+    const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+    rack.add(edges);
+    
+    // Add LED strips along the edges - classic 80s tech look
+    this.addRackLEDs(rack);
+    
+    // Add a glow effect at the base
+    const glowGeometry = new THREE.PlaneGeometry(this.rackWidth * 0.95, this.rackDepth * 0.95);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00ffff, // Cyan glow
+      transparent: true,
+      opacity: 0.3,
+      side: THREE.DoubleSide
+    });
+    
+    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+    glow.rotation.x = -Math.PI / 2;
+    glow.position.y = -this.rackHeight * 0.124; // Just at the bottom of the rack
+    rack.add(glow);
+    
+    // Add blinking status lights to top of rack
+    this.addRackStatusLights(rack);
+    
     // Set userData on container as well for consistent detection
     this.container.userData = { 
       type: 'rack', 
@@ -85,6 +119,12 @@ export class ServerRack {
     };
     
     this.container.add(rack);
+    
+    // Add LED strips along rack edges for that 80s aesthetic
+    this.addRackLEDs(rack);
+    
+    // Add blinking status lights to top of rack
+    this.addRackStatusLights(rack);
     
     // Add floating rack name label above the rack
     this.addRackNameLabel();
@@ -409,5 +449,226 @@ export class ServerRack {
   updateRackName(newName) {
     this.name = newName;
     this.addRackNameLabel(); // Recreate the label with the new name
+  }
+  
+  // Add LED strips along rack edges for that 80s aesthetic
+  addRackLEDs(rackMesh) {
+    // LED colors with 80s palette
+    const ledColors = [
+      0xff00ff, // Magenta
+      0x00ffff, // Cyan
+      0xffff00, // Yellow
+      0xff0000  // Red
+    ];
+    
+    // Make LED strips thinner and fully contained within rack edges
+    // Horizontal LED strips for top edges
+    const ledThickness = 0.03; // Thinner LEDs
+    const ledGeometry = new THREE.BoxGeometry(ledThickness, ledThickness, this.rackDepth * 0.93);
+    
+    // Top front edge - slightly inset from the edge
+    const ledMaterial1 = new THREE.MeshBasicMaterial({ 
+      color: ledColors[0],
+      transparent: true,
+      opacity: 0.9
+    });
+    const ledStrip1 = new THREE.Mesh(ledGeometry, ledMaterial1);
+    ledStrip1.position.set(-this.rackWidth * 0.47 + 0.01, this.rackHeight * 0.25 * 0.5 - 0.01, -this.rackDepth * 0.46);
+    ledStrip1.userData = { 
+      type: 'led',
+      blinkRate: 0.5 + Math.random() * 2,
+      colorIndex: 0
+    };
+    rackMesh.add(ledStrip1);
+    
+    // Top back edge - slightly inset from the edge
+    const ledMaterial2 = new THREE.MeshBasicMaterial({ 
+      color: ledColors[1],
+      transparent: true,
+      opacity: 0.9
+    });
+    const ledStrip2 = new THREE.Mesh(ledGeometry, ledMaterial2);
+    ledStrip2.position.set(this.rackWidth * 0.47 - 0.01, this.rackHeight * 0.25 * 0.5 - 0.01, -this.rackDepth * 0.46);
+    ledStrip2.userData = { 
+      type: 'led',
+      blinkRate: 0.5 + Math.random() * 2,
+      colorIndex: 1
+    };
+    rackMesh.add(ledStrip2);
+    
+    // Add vertical LED strips on front corners - slightly shorter than rack height
+    const verticalLedGeometry = new THREE.BoxGeometry(ledThickness, this.rackHeight * 0.24, ledThickness);
+    
+    // Front left corner - slightly inset from corner
+    const ledMaterial3 = new THREE.MeshBasicMaterial({ 
+      color: ledColors[2],
+      transparent: true, 
+      opacity: 0.9
+    });
+    const ledStrip3 = new THREE.Mesh(verticalLedGeometry, ledMaterial3);
+    ledStrip3.position.set(-this.rackWidth * 0.47 + 0.01, 0, -this.rackDepth * 0.47 + 0.01);
+    ledStrip3.userData = { 
+      type: 'led',
+      blinkRate: 0.5 + Math.random() * 2,
+      colorIndex: 2
+    };
+    rackMesh.add(ledStrip3);
+    
+    // Front right corner - slightly inset from corner
+    const ledMaterial4 = new THREE.MeshBasicMaterial({ 
+      color: ledColors[3],
+      transparent: true,
+      opacity: 0.9
+    });
+    const ledStrip4 = new THREE.Mesh(verticalLedGeometry, ledMaterial4);
+    ledStrip4.position.set(this.rackWidth * 0.47 - 0.01, 0, -this.rackDepth * 0.47 + 0.01);
+    ledStrip4.userData = { 
+      type: 'led',
+      blinkRate: 0.5 + Math.random() * 2,
+      colorIndex: 3
+    };
+    rackMesh.add(ledStrip4);
+    
+    // Store reference to LEDs for animation
+    this.ledStrips = [ledStrip1, ledStrip2, ledStrip3, ledStrip4];
+    this.ledColors = ledColors;
+    
+    // Start animation
+    this.animateLEDs();
+  }
+  
+  // Add blinking status lights to top of rack
+  addRackStatusLights(rackMesh) {
+    // Create a row of blinking lights on top of the rack - very 80s computer look
+    const numLights = 5;
+    const statusLights = [];
+    const lightColors = [0xff0000, 0x00ff00, 0xffff00, 0x00ffff, 0xff00ff]; // Red, green, yellow, cyan, magenta
+    
+    // Make lights smaller to keep them within rack boundaries
+    const lightSize = 0.04; // Smaller size
+    const spacing = this.rackWidth * 0.7 / numLights;
+    const startX = -this.rackWidth * 0.35 + (spacing / 2);
+    
+    for (let i = 0; i < numLights; i++) {
+      const lightGeometry = new THREE.CircleGeometry(lightSize, 16);
+      const lightMaterial = new THREE.MeshBasicMaterial({
+        color: lightColors[i],
+        transparent: true,
+        opacity: 0.9
+      });
+      
+      const light = new THREE.Mesh(lightGeometry, lightMaterial);
+      
+      // Position lights in a row on top of the rack - ensure they're contained within boundaries
+      const xPos = startX + (i * spacing);
+      // Position slightly below the top edge to prevent clipping
+      light.position.set(xPos, this.rackHeight * 0.25 * 0.5 - 0.01, -this.rackDepth * 0.3);
+      light.rotation.x = -Math.PI / 2; // Face upward
+      
+      // Add blink data
+      light.userData = {
+        blinkRate: 0.2 + Math.random() * 2.0, // Random blink rate
+        blinkPhase: Math.random() * Math.PI * 2, // Random phase
+        colorIndex: i
+      };
+      
+      rackMesh.add(light);
+      statusLights.push(light);
+      
+      // Add small glow effect beneath each light
+      const glowGeometry = new THREE.CircleGeometry(lightSize * 2, 16);
+      const glowMaterial = new THREE.MeshBasicMaterial({
+        color: lightColors[i],
+        transparent: true,
+        opacity: 0.2,
+        side: THREE.DoubleSide
+      });
+      
+      const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+      glow.position.z = -0.001; // Slightly below the LED
+      light.add(glow);
+    }
+    
+    this.statusLights = statusLights;
+    
+    // Start animation for the status lights
+    this.animateStatusLights();
+  }
+  
+  // Animate the LED strips
+  animateLEDs() {
+    if (!this.ledStrips || this.ledStrips.length === 0) return;
+    
+    const animateLed = () => {
+      if (!this.ledStrips) return; // Safety check
+      
+      const time = Date.now() * 0.001; // Current time in seconds
+      
+      // Update each LED strip
+      this.ledStrips.forEach((led, index) => {
+        // Skip if led has been removed
+        if (!led || !led.material) return;
+        
+        // Create blinking effect with unique rate
+        const blinkRate = led.userData.blinkRate;
+        const intensity = 0.7 + 0.3 * Math.sin(time * blinkRate);
+        
+        // Update opacity for blink effect
+        led.material.opacity = intensity;
+        
+        // Occasionally change color for visual interest
+        if (Math.random() < 0.005) { // 0.5% chance to change color each frame
+          const newColorIndex = (led.userData.colorIndex + 1) % this.ledColors.length;
+          led.material.color.setHex(this.ledColors[newColorIndex]);
+          led.userData.colorIndex = newColorIndex;
+        }
+      });
+      
+      // Request next animation frame
+      requestAnimationFrame(animateLed);
+    };
+    
+    // Start the animation
+    animateLed();
+  }
+  
+  // Animate the status lights
+  animateStatusLights() {
+    if (!this.statusLights || this.statusLights.length === 0) return;
+    
+    const animateLight = () => {
+      if (!this.statusLights) return; // Safety check
+      
+      const time = Date.now() * 0.001; // Current time in seconds
+      
+      // Update each status light
+      this.statusLights.forEach(light => {
+        // Skip if light has been removed
+        if (!light || !light.material) return;
+        
+        // Get light parameters
+        const blinkRate = light.userData.blinkRate;
+        const blinkPhase = light.userData.blinkPhase;
+        
+        // Different patterns for different lights
+        let intensity;
+        
+        if (Math.random() < 0.03) { // 3% chance for a random flash
+          intensity = Math.random() > 0.5 ? 1.0 : 0.3;
+        } else {
+          // Normal pattern - digital-looking on/off pattern
+          intensity = Math.sin(time * blinkRate + blinkPhase) > 0 ? 0.9 : 0.2;
+        }
+        
+        // Update opacity for blink effect
+        light.material.opacity = intensity;
+      });
+      
+      // Request next animation frame
+      requestAnimationFrame(animateLight);
+    };
+    
+    // Start the animation
+    animateLight();
   }
 }

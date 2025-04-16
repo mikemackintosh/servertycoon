@@ -49,6 +49,15 @@ export class Server {
     // Create activity LEDs that will be used to show website hosting status
     this.activityLed = this.addLED(0.5, 0, -1.42, 0xFFFF00); // Yellow activity LED
     
+    // Add multiple status LEDs for that classic 80s/90s server look
+    this.addServerStatusLEDs();
+    
+    // Add drive bay LEDs along the front edge
+    this.addDriveBayLEDs();
+    
+    // Add top chassis LEDs - very vintage server room aesthetic
+    this.addTopChassisBlinkers();
+    
     // Schedule LED update to show hosting status
     this.updateVisualStatus();
   }
@@ -115,56 +124,164 @@ export class Server {
     }
   }
   
-  addLED(x, y, z, color) {
-    const ledGeometry = new THREE.CircleGeometry(0.05, 16);
-    const ledMaterial = new THREE.MeshBasicMaterial({ 
-      color: color,
-      transparent: true,
-      opacity: 0.8
-    });
+  addLED(x, y, z, color, emissive = false, size = 0.05) {
+    const ledGeometry = new THREE.CircleGeometry(size, 16);
+    
+    let ledMaterial;
+    if (emissive) {
+      ledMaterial = new THREE.MeshStandardMaterial({ 
+        color: color,
+        transparent: true,
+        opacity: 0.9,
+        emissive: color,
+        emissiveIntensity: 0.8
+      });
+    } else {
+      ledMaterial = new THREE.MeshBasicMaterial({ 
+        color: color,
+        transparent: true,
+        opacity: 0.8
+      });
+    }
+    
     const led = new THREE.Mesh(ledGeometry, ledMaterial);
     led.position.set(x, y, z);
+    
+    // Add a small glow effect around the LED (very 80s/90s computer aesthetic)
+    if (size >= 0.04) {
+      const glowGeometry = new THREE.CircleGeometry(size * 1.8, 16);
+      const glowMaterial = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.3,
+        side: THREE.DoubleSide
+      });
+      
+      const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+      glow.position.z = -0.001; // Slightly behind the LED
+      led.add(glow);
+    }
+    
     this.container.add(led);
     return led;
   }
   
-  // Update server visual appearance based on hosting status
+  // Update server visual appearance based on hosting status with 80s/90s aesthetic
   updateVisualStatus() {
     if (!this.activityLed) return;
     
+    // Get current time for all animations
+    const time = Date.now() * 0.001; // Convert to seconds
+    
     if (this.hostedWebsites.length > 0) {
-      // Server is hosting websites - make activity LED blink
+      // Server is hosting websites - make activity LED blink rapidly
       
       // The blink rate is based on utilization - higher utilization = faster blinking
       const blinkRate = this.utilization / 100; // 0 to 1 scale
       
-      // Calculate the intensity based on time
-      const time = Date.now() * 0.001; // Convert to seconds
-      const intensity = Math.sin(time * 5 * (0.5 + blinkRate)) * 0.5 + 0.5; // 0 to 1 oscillation
+      // Calculate the intensity based on time - use faster blink patterns for retro feel
+      const intensity = Math.sin(time * 8 * (0.8 + blinkRate)) * 0.5 + 0.5; // 0 to 1 oscillation
       
-      // Alternate between yellow and red based on load
+      // Alternate between yellow and red based on load - more saturated colors for 80s look
       let color;
       if (this.utilization > 80) {
-        // High load - red color
-        color = new THREE.Color(1, intensity * 0.3, 0); // Red with pulsing intensity
+        // High load - bright red color
+        color = new THREE.Color(1, intensity * 0.2, 0); // Pure red with slight pulsing
       } else if (this.utilization > 50) {
         // Medium load - orange color
-        color = new THREE.Color(1, intensity * 0.7, 0); // Orange with pulsing intensity
+        color = new THREE.Color(1, intensity * 0.6, 0); // Orange with pulsing intensity
       } else {
         // Low load - yellow color
-        color = new THREE.Color(1, 1, intensity * 0.3); // Yellow with pulsing intensity
+        color = new THREE.Color(1, 1, intensity * 0.2); // Yellow with pulsing intensity
       }
       
-      this.activityLed.material.color = color;
-      this.activityLed.material.opacity = 0.5 + intensity * 0.5; // Pulsing opacity
-      
-      // Schedule next update
-      requestAnimationFrame(() => this.updateVisualStatus());
+      // Apply brightness based on utilization - brighter = more activity
+      this.activityLed.material.color.copy(color);
+      this.activityLed.material.opacity = 0.7 + intensity * 0.3; // Pulsing opacity
     } else {
-      // Server is idle - dim yellow LED
+      // Server is idle - dim yellow LED with occasional random flicker
       this.activityLed.material.color.set(0xFFFF00);
-      this.activityLed.material.opacity = 0.3;
+      
+      // Random flickering effect - simulates old electronics
+      const flicker = Math.random() > 0.95 ? Math.random() * 0.5 : 0;
+      this.activityLed.material.opacity = 0.3 + flicker;
     }
+    
+    // Update status LEDs
+    if (this.statusLEDs && this.statusLEDs.length > 0) {
+      this.statusLEDs.forEach(led => {
+        if (!led || !led.material) return;
+        
+        // Get LED parameters
+        const blinkRate = led.userData.blinkRate || 1.0;
+        const blinkPhase = led.userData.blinkPhase || 0;
+        
+        // Calculate LED intensity based on sine wave - classic computer blinking
+        const intensity = 0.5 + 0.5 * Math.sin(time * blinkRate + blinkPhase);
+        led.material.opacity = intensity;
+        
+        // Occasional random flicker for that classic 80s computer look
+        if (Math.random() > 0.98) {
+          led.material.opacity = Math.random() > 0.5 ? 1.0 : 0.2;
+        }
+      });
+    }
+    
+    // Update top chassis LEDs
+    if (this.topLEDs && this.topLEDs.length > 0) {
+      this.topLEDs.forEach((led, index) => {
+        if (!led || !led.material) return;
+        
+        // Get LED parameters
+        const blinkRate = led.userData.blinkRate || 1.0;
+        const blinkPhase = led.userData.blinkPhase || 0;
+        
+        // Staggered digital-looking blinking pattern based on position
+        const pattern = (Math.sin(time * blinkRate + blinkPhase + index * 0.5) > 0) ? 0.9 : 0.1;
+        led.material.opacity = pattern;
+        
+        // Random color cycling - very 80s rainbow effect
+        if (Math.random() > 0.99) { // 1% chance per frame
+          const hue = Math.random();
+          led.material.color.setHSL(hue, 1.0, 0.5);
+        }
+      });
+    }
+    
+    // Update drive bay LEDs
+    if (this.driveLEDs && this.driveLEDs.length > 0) {
+      this.driveLEDs.forEach(driveLed => {
+        if (!driveLed || !driveLed.material || !driveLed.userData.blink) return;
+        
+        const blinkData = driveLed.userData.blink;
+        
+        // Update time counter
+        blinkData.time += 0.1 * blinkData.speed;
+        
+        // Different pattern for drive LEDs - more staccato, less smooth
+        // This creates a "disk activity" look
+        let intensity;
+        
+        if (this.hostedWebsites.length > 0) {
+          // More digital-looking pattern - either on or mostly off for server activity
+          const randomActive = Math.random() > 0.7;
+          intensity = randomActive ? 0.8 + Math.random() * 0.2 : 0.1;
+        } else {
+          // Gentler pulsing when idle
+          intensity = (Math.sin(blinkData.time) + 1) * 0.3;
+        }
+        
+        // Apply intensity to the LED
+        driveLed.material.opacity = intensity;
+        
+        // Color can shift subtly
+        const hue = (Math.sin(blinkData.time * 0.2) + 1) * 0.05;
+        driveLed.material.color.setHSL(hue, 1, 0.5);
+      });
+    }
+    
+    // Schedule next update - slightly faster for retro-style rapid blinking
+    requestAnimationFrame(() => this.updateVisualStatus());
   }
   
   upgradeComponent(component, level) {
@@ -483,5 +600,146 @@ export class Server {
     }
     
     return spaceAbove && spaceBelow;
+  }
+  
+  // Add multiple status LEDs across the server for retro look
+  addServerStatusLEDs() {
+    // Get server width to properly position LEDs within the chassis
+    const serverWidth = 1.8; // From server geometry in createServerHardware
+    const ledWidth = 0.04; // Small enough LEDs to fit within chassis
+    const ledSpacing = serverWidth * 0.8 / 5; // Distribute 5 LEDs across 80% of width
+    const startX = -serverWidth * 0.8 / 2 + ledWidth;
+    
+    // Define LED colors (1980s style with bright primary colors)
+    const ledColors = [
+      0xff0000, // Red
+      0x00ff00, // Green
+      0xffff00, // Yellow
+      0x00ffff, // Cyan
+      0xff00ff  // Magenta
+    ];
+    
+    this.statusLEDs = [];
+    
+    // Create each status LED with proper spacing
+    for (let i = 0; i < 5; i++) {
+      const xPos = startX + (i * ledSpacing);
+      const led = this.addLED(xPos, 0, -1.41, ledColors[i], false, 0.04); // Smaller size
+      led.userData = {
+        type: 'statusLED',
+        blinkRate: 0.3 + (i * 0.2), // Increasing blink rates
+        blinkPhase: Math.random() * Math.PI * 2 // Random starting phase
+      };
+      this.statusLEDs.push(led);
+    }
+  }
+  
+  // Add drive bay LEDs for that classic server look
+  addDriveBayLEDs() {
+    // Get server dimensions to make sure drive bays fit within chassis
+    const serverWidth = 1.8; // From server geometry
+    const maxWidth = serverWidth * 0.9; // Keep within 90% of server width
+    
+    // Calculate drive bay dimensions to fit properly
+    const bayWidth = 0.12; // Smaller bay width
+    const bayCount = Math.min(6, Math.ceil(this.unitSize * 2)); // Limit bay count based on server size
+    
+    // Make sure all bays fit within the chassis width
+    const spacing = 0.04; // Space between bays
+    const totalNeededWidth = (bayCount * bayWidth) + ((bayCount - 1) * spacing);
+    
+    // If bays won't fit, reduce their size
+    let actualBayWidth = bayWidth;
+    if (totalNeededWidth > maxWidth) {
+      actualBayWidth = (maxWidth - ((bayCount - 1) * spacing)) / bayCount;
+    }
+    
+    // Calculate start position to center the bays
+    const totalWidth = (bayCount * actualBayWidth) + ((bayCount - 1) * spacing);
+    const startX = -totalWidth / 2 + (actualBayWidth / 2);
+    
+    this.driveLEDs = [];
+    
+    // Create each drive bay LED
+    for (let i = 0; i < bayCount; i++) {
+      const xPos = startX + i * (actualBayWidth + spacing);
+      
+      // Add small rectangular drive bay cover first (so LED appears on top)
+      const bayGeometry = new THREE.BoxGeometry(actualBayWidth, actualBayWidth * 1.1, 0.01);
+      const bayMaterial = new THREE.MeshStandardMaterial({
+        color: 0x333333,
+        roughness: 0.8,
+        metalness: 0.4
+      });
+      
+      const bayMesh = new THREE.Mesh(bayGeometry, bayMaterial);
+      bayMesh.position.set(xPos, 0, -1.405);
+      this.container.add(bayMesh);
+      
+      // Add tiny drive LED - blinking light for disk activity
+      const driveLed = this.addLED(xPos, 0, -1.4, 0x00ff00, false, 0.02); // Very small LEDs
+      driveLed.userData = { 
+        blink: {
+          time: Math.random() * Math.PI * 2, 
+          speed: 0.5 + Math.random() * 1.5
+        },
+        type: 'driveLED'
+      };
+      this.driveLEDs.push(driveLed);
+    }
+  }
+  
+  // Add top chassis LEDs - row of blinking lights on server top
+  addTopChassisBlinkers() {
+    // Get server dimensions
+    const serverWidth = 1.8; // From server geometry
+    const height = this.unitSize * 0.25 * (1/42); // Height based on U size
+    
+    // Scale number of LEDs based on server size, but keep within chassis width
+    const ledCount = Math.max(3, Math.min(5, this.unitSize * 1.5)); // 3-5 LEDs based on server size
+    const colors = [0xff0000, 0xff9900, 0xffff00, 0x00ff00, 0x00ffff, 0x0000ff, 0xff00ff]; // Rainbow!
+    
+    this.topLEDs = [];
+    
+    // Calculate spacing to keep LEDs within the chassis
+    const ledSize = 0.03; // Smaller LEDs
+    const maxWidth = serverWidth * 0.8; // Keep within 80% of server width
+    
+    // Make sure LEDs fit within server width
+    const spacing = Math.min((maxWidth - (ledCount * 2 * ledSize)) / (ledCount - 1), 0.2);
+    const totalWidth = (ledCount * 2 * ledSize) + ((ledCount - 1) * spacing);
+    const startX = -totalWidth / 2 + ledSize;
+    
+    for (let i = 0; i < ledCount; i++) {
+      const xPos = startX + i * (2 * ledSize + spacing);
+      const yPos = height/2 + 0.005; // Just above the top of the server (smaller offset)
+      
+      // Distribute LEDs evenly from front to back, staying within server depth
+      const zPos = -1.0 + (i % 2) * 2.0; // Alternate between front and back
+      
+      // Create the top LED - smaller size
+      const led = new THREE.Mesh(
+        new THREE.CircleGeometry(ledSize, 16),
+        new THREE.MeshBasicMaterial({
+          color: colors[i % colors.length],
+          transparent: true,
+          opacity: 0.8,
+          side: THREE.DoubleSide
+        })
+      );
+      
+      led.rotation.x = -Math.PI/2; // Make it face up
+      led.position.set(xPos, yPos, zPos);
+      
+      // Add blink data
+      led.userData = {
+        blinkRate: 0.2 + Math.random() * 1.5,
+        blinkPhase: Math.random() * Math.PI * 2,
+        type: 'topLED'
+      };
+      
+      this.container.add(led);
+      this.topLEDs.push(led);
+    }
   }
 }
