@@ -24,10 +24,12 @@ export class ServerRack {
     this.connected = false;
     this.circuitConnection = null;
     
-    // Power and temperature
+    // Power, cooling and temperature
     this.hasPower = true;
     this.powerCapacity = 2000; // 2 kilowatt capacity
-    this.powerAvailable = 2000; // Available power 
+    this.powerAvailable = 2000; // Available power
+    this.coolingCapacity = 2000; // Cooling capacity in watts
+    this.coolingAvailable = 2000; // Available cooling
     this.temperature = 22; // Temperature in Celsius
   }
 
@@ -224,10 +226,17 @@ export class ServerRack {
       return null;
     }
     
-    // Check if there's enough power available
+    // Check if there's enough power and cooling available
     const serverPower = 150; // Estimated initial power draw
     if (serverPower > this.powerAvailable) {
       console.error("Not enough power available in rack");
+      return null;
+    }
+    
+    // Check cooling capacity
+    const serverCooling = 140; // Servers typically need cooling close to their power draw
+    if (serverCooling > this.coolingAvailable) {
+      console.error("Not enough cooling available in rack");
       return null;
     }
     
@@ -240,8 +249,9 @@ export class ServerRack {
     const yPos = (position / this.rackHeightUnits) * this.rackHeight * 0.25;
     server.container.position.set(0, yPos, 0);
     
-    // Update available power
+    // Update available power and cooling
     this.powerAvailable -= server.powerConsumption;
+    this.coolingAvailable -= serverCooling;
     
     this.servers.push(server);
     this.container.add(server.container);
@@ -258,9 +268,16 @@ export class ServerRack {
       return null;
     }
     
-    // Check if there's enough power available
+    // Check if there's enough power and cooling available
     if (equipment.powerConsumption > this.powerAvailable) {
       console.error("Not enough power available in rack");
+      return null;
+    }
+    
+    // Check cooling capacity - network equipment has lower cooling needs
+    const equipmentCooling = equipment.powerConsumption * 0.8; // Network equipment typically needs less cooling than servers
+    if (equipmentCooling > this.coolingAvailable) {
+      console.error("Not enough cooling available in rack");
       return null;
     }
     
@@ -271,8 +288,9 @@ export class ServerRack {
     const yPos = (position / this.rackHeightUnits) * this.rackHeight * 0.25;
     equipment.container.position.set(0, yPos, 0);
     
-    // Update available power
+    // Update available power and cooling
     this.powerAvailable -= equipment.powerConsumption;
+    this.coolingAvailable -= (equipment.powerConsumption * 0.8);
     
     this.networkEquipment.push(equipment);
     this.container.add(equipment.container);
@@ -286,8 +304,10 @@ export class ServerRack {
     if (serverIndex !== -1) {
       const server = this.servers[serverIndex];
       
-      // Return power to the rack
+      // Return power and cooling to the rack
       this.powerAvailable += server.powerConsumption;
+      // Estimate cooling returned based on power consumption (same ratio as when added)
+      this.coolingAvailable += server.powerConsumption * 0.93; // 140/150 ratio from addServer
       
       this.container.remove(server.container);
       this.servers.splice(serverIndex, 1);
@@ -300,8 +320,10 @@ export class ServerRack {
     if (equipmentIndex !== -1) {
       const equipment = this.networkEquipment[equipmentIndex];
       
-      // Return power to the rack
+      // Return power and cooling to the rack
       this.powerAvailable += equipment.powerConsumption;
+      // Return cooling based on the same 80% ratio used when adding
+      this.coolingAvailable += equipment.powerConsumption * 0.8;
       
       this.container.remove(equipment.container);
       this.networkEquipment.splice(equipmentIndex, 1);
@@ -315,6 +337,7 @@ export class ServerRack {
     const totalUsedUnits = serverUnits + networkUnits;
     
     const totalPowerUsage = this.calculateTotalPowerUsage();
+    const totalCoolingUsage = this.coolingCapacity - this.coolingAvailable;
     
     console.log("Rack details:", {
       id: this.id,
@@ -328,7 +351,10 @@ export class ServerRack {
       temperature: this.temperature.toFixed(1),
       powerCapacity: this.powerCapacity,
       powerUsage: totalPowerUsage,
-      powerAvailable: this.powerAvailable
+      powerAvailable: this.powerAvailable,
+      coolingCapacity: this.coolingCapacity,
+      coolingUsage: totalCoolingUsage,
+      coolingAvailable: this.coolingAvailable
     });
   }
   

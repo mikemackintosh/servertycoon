@@ -42,6 +42,9 @@ export class Datacenter {
     this.dragOffset = new THREE.Vector2();
     this.validDropPosition = true;
     
+    // Track pending rack for purchase flow
+    this.pendingRack = null; // Will hold specs for a purchased rack awaiting placement
+    
     // Receiving dock for equipment
     this.receivingDock = {
       position: new THREE.Vector3(
@@ -577,6 +580,23 @@ export class Datacenter {
     const rack = new ServerRack(this.game);
     rack.gridX = gridX;
     rack.gridZ = gridZ; // This represents the FRONT of the rack
+    
+    // If we have a pending rack from purchase, apply its specs
+    if (this.pendingRack) {
+      // Apply purchased rack specs
+      if (this.pendingRack.name) rack.name = this.pendingRack.name;
+      if (this.pendingRack.rackHeightUnits) rack.rackHeightUnits = this.pendingRack.rackHeightUnits;
+      if (this.pendingRack.powerCapacity) rack.powerCapacity = this.pendingRack.powerCapacity;
+      if (this.pendingRack.coolingCapacity) rack.coolingCapacity = this.pendingRack.coolingCapacity;
+      
+      // Update available capacities
+      rack.powerAvailable = rack.powerCapacity;
+      rack.coolingAvailable = rack.coolingCapacity;
+      
+      // Clear the pending rack specs
+      this.pendingRack = null;
+    }
+    
     rack.init(isEmpty); // Pass isEmpty flag to init
     
     // Position exactly centered over the two grid cells, slightly above the raised floor

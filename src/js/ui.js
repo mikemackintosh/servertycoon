@@ -279,7 +279,6 @@ export class UI {
     
     // Add menu items
     const menuItems = [
-      { label: 'Add Rack', separator: false },
       { label: 'Buy Circuit', separator: false },
       { label: 'Buy Server', separator: false },
       { label: 'Buy Network Equipment', separator: true },
@@ -307,9 +306,7 @@ export class UI {
       
       // Add click handlers
       itemElement.addEventListener('click', () => {
-        if (item.label === 'Add Rack') {
-          this.toggleRackPlacementMode();
-        } else if (item.label === 'Buy Circuit') {
+        if (item.label === 'Buy Circuit') {
           this.showCircuitPurchaseUI();
         } else if (item.label === 'Buy Server') {
           this.showServerPurchaseUI();
@@ -2844,6 +2841,12 @@ export class UI {
       <p>Select a category of equipment to purchase:</p>
       <div class="purchase-options" style="display: flex; flex-wrap: wrap; gap: 15px; margin-top: 20px;">
         <div class="purchase-option" style="border: 1px solid #999; border-radius: 5px; padding: 15px; min-width: 200px; cursor: pointer;">
+          <h4>Server Racks</h4>
+          <p>Purchase racks to house your equipment</p>
+          <button id="purchase-rack-btn">Browse Racks</button>
+        </div>
+      
+        <div class="purchase-option" style="border: 1px solid #999; border-radius: 5px; padding: 15px; min-width: 200px; cursor: pointer;">
           <h4>Servers</h4>
           <p>Purchase servers to add to your racks</p>
           <button id="purchase-server-btn">Browse Servers</button>
@@ -2864,6 +2867,10 @@ export class UI {
     `;
     
     // Add event listeners
+    document.getElementById('purchase-rack-btn').addEventListener('click', () => {
+      this.showRackPurchaseUI();
+    });
+    
     document.getElementById('purchase-server-btn').addEventListener('click', () => {
       this.showServerPurchaseUI();
     });
@@ -3289,6 +3296,142 @@ export class UI {
   }
   
   // Show UI for purchasing network equipment
+  // Show UI for purchasing racks
+  showRackPurchaseUI() {
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    modalContent.style.width = '800px';
+    modalContent.style.maxWidth = '90%';
+    
+    // Add close button
+    const closeButton = document.createElement('div');
+    closeButton.className = 'modal-close';
+    closeButton.innerHTML = '&times;';
+    closeButton.addEventListener('click', () => this.closeModal());
+    modalContent.appendChild(closeButton);
+    
+    // Add title
+    const title = document.createElement('h2');
+    title.textContent = 'Purchase Server Racks';
+    modalContent.appendChild(title);
+    
+    // Define rack options with cooling and power capacities
+    const rackOptions = [
+      {
+        name: 'Basic Rack',
+        cost: 800,
+        specs: {
+          name: 'Basic 42U Rack',
+          rackHeightUnits: 42,
+          powerCapacity: 2000, // 2 kW power capacity
+          coolingCapacity: 1800, // 1.8 kW cooling capacity
+          railType: 'Standard',
+          maxWeight: 500 // kg
+        }
+      },
+      {
+        name: 'Standard Rack',
+        cost: 1500,
+        specs: {
+          name: 'Standard 42U Rack',
+          rackHeightUnits: 42,
+          powerCapacity: 4000, // 4 kW power capacity
+          coolingCapacity: 3800, // 3.8 kW cooling capacity
+          railType: 'Standard',
+          maxWeight: 800 // kg
+        }
+      },
+      {
+        name: 'Enterprise Rack',
+        cost: 3000,
+        specs: {
+          name: 'Enterprise 42U Rack',
+          rackHeightUnits: 42,
+          powerCapacity: 8000, // 8 kW power capacity
+          coolingCapacity: 7500, // 7.5 kW cooling capacity
+          railType: 'Premium',
+          maxWeight: 1200 // kg
+        }
+      },
+      {
+        name: 'High-Density Rack',
+        cost: 5000,
+        specs: {
+          name: 'High-Density 48U Rack',
+          rackHeightUnits: 48,
+          powerCapacity: 15000, // 15 kW power capacity
+          coolingCapacity: 14000, // 14 kW cooling capacity
+          railType: 'Heavy Duty',
+          maxWeight: 2000 // kg
+        }
+      }
+    ];
+    
+    // Create rack options HTML
+    const rackOptionsHtml = rackOptions.map(rack => `
+      <div class="rack-option" data-name="${rack.name}" style="border: 1px solid #999; border-radius: 5px; padding: 15px; margin-bottom: 15px; cursor: pointer;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h4 style="margin: 0;">${rack.name}</h4>
+          <span style="font-weight: bold;">$${rack.cost}</span>
+        </div>
+        <p><strong>Size:</strong> ${rack.specs.rackHeightUnits}U</p>
+        <p><strong>Power Capacity:</strong> ${rack.specs.powerCapacity/1000} kW</p>
+        <p><strong>Cooling Capacity:</strong> ${rack.specs.coolingCapacity/1000} kW</p>
+        <p><strong>Rail Type:</strong> ${rack.specs.railType}</p>
+        <p><strong>Max Weight:</strong> ${rack.specs.maxWeight} kg</p>
+        <button class="purchase-rack-btn" data-rack="${rack.name}">Purchase</button>
+      </div>
+    `).join('');
+    
+    const content = document.createElement('div');
+    content.innerHTML = `
+      <p>Select a server rack to purchase:</p>
+      <div class="rack-options">
+        ${rackOptionsHtml}
+      </div>
+      <button id="back-to-purchase-btn" style="margin-top: 20px;">Back to Purchase Menu</button>
+    `;
+    
+    modalContent.appendChild(content);
+    this.openModal(modalContent);
+    
+    // Add event listeners for purchase buttons
+    const purchaseButtons = document.querySelectorAll('.purchase-rack-btn');
+    purchaseButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        const rackName = button.dataset.rack;
+        const rack = rackOptions.find(r => r.name === rackName);
+        
+        if (rack) {
+          if (this.game.datacenter.funds < rack.cost) {
+            alert('Not enough funds to purchase this rack.');
+            return;
+          }
+          
+          // Enter rack placement mode
+          this.game.datacenter.funds -= rack.cost;
+          
+          // Save rack specs for placement
+          this.game.datacenter.pendingRack = rack.specs;
+          
+          // Enter rack placement mode
+          this.toggleRackPlacementMode();
+          
+          // Close the UI
+          this.closeModal();
+          
+          // Show a prompt
+          this.showStatusMessage('Click on the grid to place your new rack.');
+        }
+      });
+    });
+    
+    // Back button
+    document.getElementById('back-to-purchase-btn').addEventListener('click', () => {
+      this.showReceivingDockUI();
+    });
+  }
+  
   showNetworkEquipmentPurchaseUI() {
     const modalContent = document.createElement('div');
     modalContent.className = 'modal-content';
