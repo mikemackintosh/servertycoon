@@ -160,6 +160,12 @@ export class EgressRouter {
     
     // Position at the specified location
     this.container.position.set(this.position.x, this.position.y, this.position.z);
+    
+    // Set the connectionTile position to be relative to our position
+    if (this.connectionTile) {
+      this.connectionTile.position.copy(this.container.position);
+      console.log("Updated connection tile position:", this.connectionTile.position);
+    }
   }
   
   createCabinet() {
@@ -207,11 +213,162 @@ export class EgressRouter {
     label.position.set(0, 11, 1.76); // Top front of cabinet
     label.rotation.x = Math.PI / 2;
     
-    // In a real implementation, you would use TextGeometry or CSS2DRenderer
-    // to add text labels. This is just a placeholder.
+    // Add blue tile on the ground as connection destination
+    this.createConnectionTile();
     
     this.container.add(this.cabinet);
     this.container.add(label);
+  }
+  
+  // Create a blue tile on the ground as connection destination
+  createConnectionTile() {
+    // Create a group for the connection tile
+    this.connectionTile = new THREE.Group();
+    
+    // Create a blue glowing tile that sits on the grid - make it more visible
+    const tileSize = 2; // Same size as a grid cell
+    const tileGeometry = new THREE.BoxGeometry(tileSize, 0.1, tileSize); // Increase height
+    const tileMaterial = new THREE.MeshStandardMaterial({
+      color: 0x00a0ff, // Brighter blue
+      roughness: 0.1,
+      metalness: 0.9,
+      transparent: true,
+      opacity: 1.0, // Full opacity
+      emissive: 0x0078d7,
+      emissiveIntensity: 0.8 // Stronger glow
+    });
+    
+    const tile = new THREE.Mesh(tileGeometry, tileMaterial);
+    // Position on the closest floor tile square
+    tile.position.set(0, 0.06, 3.5); 
+    tile.castShadow = false;
+    tile.receiveShadow = true;
+    
+    // Add a clearer "CONNECT HERE" label on the tile
+    const labelGeometry = new THREE.PlaneGeometry(1.8, 0.4);
+    const labelMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff, // White text
+      transparent: false, // Solid
+      side: THREE.DoubleSide
+    });
+    
+    const label = new THREE.Mesh(labelGeometry, labelMaterial);
+    label.position.set(0, 0.06, 0); // Higher above the tile
+    label.rotation.x = -Math.PI / 2; // Lay flat on top of tile
+    tile.add(label);
+    
+    // Add a border around the tile for better visibility
+    const borderSize = tileSize + 0.1;
+    const borderGeometry = new THREE.BoxGeometry(borderSize, 0.05, borderSize);
+    const borderMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff, // White border
+      transparent: true,
+      opacity: 0.8
+    });
+    
+    const border = new THREE.Mesh(borderGeometry, borderMaterial);
+    border.position.set(0, -0.02, 0); // Slightly below the tile
+    tile.add(border);
+    
+    // Add vertical beams of light for extra visibility
+    const beamGeometry = new THREE.CylinderGeometry(0.1, 0.5, 5, 16);
+    const beamMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00a0ff,
+      transparent: true,
+      opacity: 0.3
+    });
+    
+    const beam = new THREE.Mesh(beamGeometry, beamMaterial);
+    beam.position.set(0, 2.5, 0); // Position above the tile
+    tile.add(beam);
+    
+    // Add circular pulse effect on the ground
+    const pulseGeometry = new THREE.CircleGeometry(tileSize, 32);
+    const pulseMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00a0ff,
+      transparent: true,
+      opacity: 0.5,
+      side: THREE.DoubleSide
+    });
+    
+    const pulse = new THREE.Mesh(pulseGeometry, pulseMaterial);
+    pulse.rotation.x = -Math.PI / 2; // Lay flat
+    pulse.position.set(0, 0.01, 0); // Just above the ground
+    tile.add(pulse);
+    
+    // Store references for animation
+    tile.userData = {
+      type: 'connectionTile',
+      id: this.id + '-tile',
+      isConnectionPoint: true,
+      interactive: true,
+      pulse: pulse,
+      beam: beam
+    };
+    
+    // Add pulse animation for the tile
+    this.animateConnectionTile(tile);
+    
+    // Add to the container
+    this.connectionTile.add(tile);
+    
+    // Add the connection tile directly to the scene to ensure it's visible
+    // This bypasses any potential issues with parent container visibility
+    if (this.game && this.game.scene) {
+      this.game.scene.add(this.connectionTile);
+    } else {
+      this.container.add(this.connectionTile);
+    }
+    
+    // Log that we created the tile
+    console.log("Created connection tile:", this.connectionTile);
+  }
+  
+  // Animate the connection tile with a more dramatic pulse effect
+  animateConnectionTile(tile) {
+    const animate = () => {
+      if (!this.connectionTile) return;
+      
+      const time = Date.now() * 0.001; // Current time in seconds
+      
+      // Dramatic pulsing effect
+      const pulseFactor = 0.5 + 0.5 * Math.sin(time * 1.5);
+      const fastPulse = 0.5 + 0.5 * Math.sin(time * 3);
+      
+      // Update tile emissive intensity and opacity
+      if (tile.material) {
+        tile.material.emissiveIntensity = 0.5 + 0.5 * pulseFactor;
+        tile.material.opacity = 0.8 + 0.2 * pulseFactor;
+      }
+      
+      // Animate the pulse circle
+      if (tile.userData.pulse && tile.userData.pulse.material) {
+        // Scale the pulse circle in and out
+        const scaleVal = 1.0 + 0.5 * pulseFactor;
+        tile.userData.pulse.scale.set(scaleVal, scaleVal, 1);
+        
+        // Adjust opacity for fade in/out effect
+        tile.userData.pulse.material.opacity = 0.7 - 0.5 * pulseFactor;
+      }
+      
+      // Animate the light beam
+      if (tile.userData.beam && tile.userData.beam.material) {
+        // Make the beam flicker slightly
+        tile.userData.beam.material.opacity = 0.2 + 0.2 * fastPulse;
+        
+        // Gently sway the beam
+        const swayX = Math.sin(time * 0.5) * 0.05;
+        const swayZ = Math.cos(time * 0.7) * 0.05;
+        tile.userData.beam.position.x = swayX;
+        tile.userData.beam.position.z = swayZ;
+      }
+      
+      // Continue animation
+      requestAnimationFrame(animate);
+    };
+    
+    // Start animation
+    animate();
   }
   
   addCircuit(circuitType) {
