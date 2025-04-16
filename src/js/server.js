@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 
 export class Server {
-  constructor(game, unitSize = 1) {
+  constructor(game, unitSize = 1, name = null) {
     this.game = game;
     this.container = new THREE.Group();
     this.id = Math.random().toString(36).substr(2, 9); // Unique ID
+    this.name = name || `Server-${this.id.substring(0, 4)}`; // Default name if none provided
     this.unitSize = unitSize; // Height in rack units (1U, 2U, etc)
     this.position = 0; // Position in the rack (0-indexed)
     this.specs = {
@@ -25,9 +26,11 @@ export class Server {
     this.utilization = 0; // 0-100%
     this.status = 'idle'; // idle, running, error
     this.revenue = 10; // $ per hour
+    this.powered = true; // Power status
     
     // Network connectivity properties
     this.ipAddress = null;
+    this.connected = false;
     this.gateway = null;
     this.connected = false;
     this.connections = []; // Stores connection details to network equipment
@@ -145,8 +148,22 @@ export class Server {
     // Simulate random utilization changes
     this.utilization = Math.min(100, Math.max(0, this.utilization + (Math.random() - 0.5) * 10));
     
-    // Update temperature based on utilization
-    const targetTemp = 35 + (this.utilization / 100) * 30; // 35°C idle, up to 65°C at full load
+    // Get the rack this server is in
+    const rack = this.getRack();
+    let baseTemp = 35; // Default base temp
+    let coolingFactor = 1.0; // Default cooling factor
+    
+    // Check if there's airflow space around the server
+    if (rack) {
+      // Check for 2U spacing above and below for better airflow
+      const hasAirflow = this.checkAirflow(rack);
+      coolingFactor = hasAirflow ? 0.7 : 1.0; // 30% more efficient cooling with airflow
+      baseTemp = rack.temperature; // Use rack temperature as the base
+    }
+    
+    // Update temperature based on utilization and cooling
+    const utilizationHeat = (this.utilization / 100) * 30; // Heat from utilization
+    const targetTemp = baseTemp + utilizationHeat * coolingFactor;
     this.temperature += (targetTemp - this.temperature) * 0.1;
     
     // Update status based on temperature and utilization
@@ -166,6 +183,7 @@ export class Server {
     // Method to display detailed server info in UI
     console.log("Server details:", {
       id: this.id,
+      name: this.name,
       unitSize: this.unitSize,
       specs: this.specs,
       power: this.powerConsumption,
@@ -174,5 +192,57 @@ export class Server {
       status: this.status,
       revenue: this.revenue
     });
+  }
+  
+  // Find which rack this server is in
+  getRack() {
+    if (!this.game || !this.game.datacenter) return null;
+    
+    for (const rack of this.game.datacenter.racks) {
+      if (rack.servers.includes(this)) {
+        return rack;
+      }
+    }
+    return null;
+  }
+  
+  // Check if this server has good airflow (2U space above and below)
+  checkAirflow(rack) {
+    if (!rack) return false;
+    
+    const position = this.position;
+    const size = this.unitSize;
+    
+    // Check for 2U space above and below
+    let spaceAbove = true;
+    let spaceBelow = true;
+    
+    // Check space below
+    if (position < 2) {
+      spaceBelow = false; // Not enough space at the bottom
+    } else {
+      // Check for equipment in the space below
+      for (let i = position - 2; i < position; i++) {
+        if (!rack.isPositionAvailable(i, 1, this.id)) {
+          spaceBelow = false;
+          break;
+        }
+      }
+    }
+    
+    // Check space above
+    if (position + size + 2 > rack.rackHeightUnits) {
+      spaceAbove = false; // Not enough space at the top
+    } else {
+      // Check for equipment in the space above
+      for (let i = position + size; i < position + size + 2; i++) {
+        if (!rack.isPositionAvailable(i, 1, this.id)) {
+          spaceAbove = false;
+          break;
+        }
+      }
+    }
+    
+    return spaceAbove && spaceBelow;
   }
 }

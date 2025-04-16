@@ -570,12 +570,25 @@ export class Datacenter {
       interactive: true // Mark as interactive for click handling
     };
     
+    // Ensure all children have consistent userData
+    rack.container.traverse(child => {
+      if (child.userData && child.userData.type === 'rack') {
+        child.userData.gridX = gridX;
+        child.userData.gridZ = gridZ;
+        child.userData.rackId = rack.id;
+        child.userData.id = rack.id;
+        child.userData.movable = true;
+        child.userData.interactive = true;
+      }
+    });
+    
     this.racks.push(rack);
     this.container.add(rack.container);
     
     // Add event listeners for rack movement
     this.makeRackDraggable(rack);
     
+    console.log(`Added rack ${rack.id} at grid position (${gridX}, ${gridZ})`);
     return rack;
   }
   
@@ -613,7 +626,10 @@ export class Datacenter {
   
   // Move a rack to a new grid position
   moveRack(rack, newGridX, newGridZ) {
-    if (!this.isGridPositionAvailable(newGridX, newGridZ, rack.container.userData.id)) {
+    // Get the rack ID to exclude in position check
+    const rackId = rack.id || (rack.container && rack.container.userData && rack.container.userData.id);
+    
+    if (!this.isGridPositionAvailable(newGridX, newGridZ, rackId)) {
       console.error('Cannot move rack - position occupied');
       return false;
     }
@@ -621,8 +637,22 @@ export class Datacenter {
     // Update rack position in grid
     rack.gridX = newGridX;
     rack.gridZ = newGridZ;
-    rack.container.userData.gridX = newGridX;
-    rack.container.userData.gridZ = newGridZ;
+    
+    // Ensure userData is updated on the container
+    if (rack.container && rack.container.userData) {
+      rack.container.userData.gridX = newGridX;
+      rack.container.userData.gridZ = newGridZ;
+      rack.container.userData.rackId = rack.id;
+      
+      // Ensure all children also have the rack ID for consistent picking
+      rack.container.traverse(child => {
+        if (child.userData && child.userData.type === 'rack') {
+          child.userData.rackId = rack.id;
+          child.userData.gridX = newGridX;
+          child.userData.gridZ = newGridZ;
+        }
+      });
+    }
     
     // Calculate world position
     const posX = (newGridX * this.cellSize) - (this.gridSize.width * this.cellSize / 2) + (this.cellSize / 2);
@@ -636,7 +666,7 @@ export class Datacenter {
       this.game.cableManager.updateAllCables();
     }
     
-    console.log(`Rack moved to grid position (${newGridX}, ${newGridZ})`);
+    console.log(`Rack moved to grid position (${newGridX}, ${newGridZ}) with ID ${rack.id}`);
     return true;
   }
   

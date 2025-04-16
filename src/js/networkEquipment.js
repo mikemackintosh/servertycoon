@@ -169,6 +169,8 @@ export class NetworkEquipment {
     this.unitSize = options.unitSize || this.specs.unitSize;
     this.position = 0; // Position in rack (set when added to rack)
     this.name = options.name || `${this.specs.name} ${this.id.substring(0, 4)}`;
+    this.powered = true; // Power status
+    this.connected = false; // Network status
     
     // Port configuration
     this.numPorts = options.numPorts || this.specs.defaultPorts;

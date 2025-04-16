@@ -955,8 +955,8 @@ export class UI {
     // Create modal content for the rack view
     const modalContent = document.createElement('div');
     modalContent.className = 'modal-content';
-    modalContent.style.width = '800px';
-    modalContent.style.maxWidth = '90%';
+    modalContent.style.width = '950px';
+    modalContent.style.maxWidth = '95%';
     
     // Add close button
     const closeButton = document.createElement('div');
@@ -965,9 +965,9 @@ export class UI {
     closeButton.addEventListener('click', () => this.closeModal());
     modalContent.appendChild(closeButton);
     
-    // Add title
+    // Add title showing rack name
     const title = document.createElement('h2');
-    title.textContent = `Rack at Position (${rack.gridX}, ${rack.gridZ})`;
+    title.textContent = `${rack.name} - Position (${rack.gridX}, ${rack.gridZ})`;
     modalContent.appendChild(title);
     
     // Create tabs container for Windows 2000 style tabs
@@ -998,6 +998,19 @@ export class UI {
     serversTab.style.backgroundColor = '#bbb';
     serversTab.style.border = '1px solid #999';
     serversTab.style.borderBottom = 'none';
+    
+    // Profile tab
+    const profileTab = document.createElement('div');
+    profileTab.className = 'tab';
+    profileTab.textContent = 'Profile View';
+    profileTab.style.padding = '8px 15px';
+    profileTab.style.backgroundColor = '#bbb';
+    profileTab.style.border = '1px solid #999';
+    profileTab.style.borderBottom = 'none';
+    profileTab.style.marginRight = '5px';
+    profileTab.style.cursor = 'pointer';
+    profileTab.style.borderTopLeftRadius = '4px';
+    profileTab.style.borderTopRightRadius = '4px';
     serversTab.style.marginRight = '5px';
     serversTab.style.cursor = 'pointer';
     serversTab.style.borderTopLeftRadius = '4px';
@@ -1017,6 +1030,7 @@ export class UI {
     
     tabContainer.appendChild(overviewTab);
     tabContainer.appendChild(serversTab);
+    tabContainer.appendChild(profileTab);
     tabContainer.appendChild(networkTab);
     modalContent.appendChild(tabContainer);
     
@@ -1133,6 +1147,315 @@ export class UI {
       });
     };
     
+    // Helper function to show profile view
+    const showProfileView = () => {
+      // Create the rack profile canvas
+      contentContainer.innerHTML = `
+        <h3>Rack Profile View</h3>
+        <div style="display: flex; justify-content: space-between;">
+          <div id="rack-profile-container" style="width: 250px; height: 720px; position: relative; border: 1px solid #999; margin-right: 20px; background-color: #333; overflow: hidden;">
+            <!-- Profile display -->
+          </div>
+          <div style="flex-grow: 1;">
+            <h4>Rack Information</h4>
+            <div style="display: flex; align-items: center; margin-bottom: 8px;">
+              <strong style="margin-right: 8px;">Name:</strong> 
+              <span id="rack-name-display">${rack.name}</span>
+              <button id="edit-rack-name-btn" style="margin-left: 10px; font-size: 11px; padding: 2px 5px;">Edit Name</button>
+            </div>
+            <div id="rack-name-edit" style="display: none; margin-bottom: 8px;">
+              <input type="text" id="rack-name-input" value="${rack.name}" style="width: 200px; margin-right: 5px;">
+              <button id="save-rack-name-btn" style="font-size: 11px; padding: 2px 5px;">Save</button>
+              <button id="cancel-rack-name-btn" style="font-size: 11px; padding: 2px 5px; margin-left: 5px;">Cancel</button>
+            </div>
+            <p><strong>Status:</strong> ${rack.hasPower ? 'Powered' : 'No Power'}</p>
+            <p><strong>Temperature:</strong> ${rack.temperature.toFixed(1)}°C</p>
+            <p><strong>Power Usage:</strong> ${rack.calculateTotalPowerUsage()}W / ${rack.powerCapacity}W (${Math.round((rack.calculateTotalPowerUsage()/rack.powerCapacity)*100)}%)</p>
+            <p><strong>Height:</strong> ${rack.rackHeightUnits}U</p>
+            <p><strong>Used Space:</strong> ${rack.servers.reduce((sum, s) => sum + s.unitSize, 0) + rack.networkEquipment.reduce((sum, e) => sum + e.unitSize, 0)}U</p>
+            <p><strong>Network:</strong> ${rack.connected ? 'Connected' : 'Not Connected'}</p>
+            
+            <div style="margin-top: 20px;">
+              <h4>Equipment List</h4>
+              <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr>
+                    <th style="text-align: left; padding: 5px; border-bottom: 1px solid #999;">Position</th>
+                    <th style="text-align: left; padding: 5px; border-bottom: 1px solid #999;">Name</th>
+                    <th style="text-align: left; padding: 5px; border-bottom: 1px solid #999;">Type</th>
+                    <th style="text-align: left; padding: 5px; border-bottom: 1px solid #999;">Size</th>
+                    <th style="text-align: left; padding: 5px; border-bottom: 1px solid #999;">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="equipment-list">
+                  ${[...rack.servers, ...rack.networkEquipment]
+                    .sort((a, b) => b.position - a.position) // Sort by position (top to bottom)
+                    .map(item => {
+                      const type = item.constructor.name === 'Server' ? 'Server' : item.type;
+                      return `
+                        <tr>
+                          <td style="padding: 5px; border-bottom: 1px solid #eee;">${item.position}U</td>
+                          <td style="padding: 5px; border-bottom: 1px solid #eee;">${item.name || 'Unnamed'}</td>
+                          <td style="padding: 5px; border-bottom: 1px solid #eee;">${type}</td>
+                          <td style="padding: 5px; border-bottom: 1px solid #eee;">${item.unitSize}U</td>
+                          <td style="padding: 5px; border-bottom: 1px solid #eee;">${item.powered !== undefined ? (item.powered ? 'On' : 'Off') : 'N/A'}</td>
+                        </tr>
+                      `;
+                    }).join('')
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // Draw the rack profile
+      setTimeout(() => {
+        const profileContainer = document.getElementById('rack-profile-container');
+        if (profileContainer) {
+          console.log("Found profile container, drawing profile");
+          drawRackProfile(profileContainer, rack);
+        } else {
+          console.error("Profile container not found");
+        }
+      }, 100);
+      
+      // Add edit rack name functionality
+      setTimeout(() => {
+        const editBtn = document.getElementById('edit-rack-name-btn');
+        const saveBtn = document.getElementById('save-rack-name-btn');
+        const cancelBtn = document.getElementById('cancel-rack-name-btn');
+        const nameDisplay = document.getElementById('rack-name-display');
+        const nameEdit = document.getElementById('rack-name-edit');
+        const nameInput = document.getElementById('rack-name-input');
+        
+        if (editBtn && saveBtn && cancelBtn) {
+          // Show edit form
+          editBtn.addEventListener('click', () => {
+            nameDisplay.parentElement.style.display = 'none';
+            nameEdit.style.display = 'block';
+            nameInput.focus();
+            nameInput.select();
+          });
+          
+          // Cancel edit
+          cancelBtn.addEventListener('click', () => {
+            nameEdit.style.display = 'none';
+            nameDisplay.parentElement.style.display = 'flex';
+            nameInput.value = rack.name;
+          });
+          
+          // Save new name
+          saveBtn.addEventListener('click', () => {
+            const newName = nameInput.value.trim();
+            if (newName) {
+              // Update rack name and the 3D label
+              rack.updateRackName(newName);
+              nameDisplay.textContent = newName;
+              
+              // Update the profile view with new name
+              profileContainer.innerHTML = '';
+              drawRackProfile(profileContainer, rack);
+              
+              // Update modal title
+              const modalTitle = document.querySelector('.modal-content h2');
+              if (modalTitle) {
+                modalTitle.textContent = `${rack.name} - Position (${rack.gridX}, ${rack.gridZ})`;
+              }
+              
+              // Hide edit form
+              nameEdit.style.display = 'none';
+              nameDisplay.parentElement.style.display = 'flex';
+            }
+          });
+        }
+      }, 150);
+    };
+    
+    // Function to draw the rack profile
+    const drawRackProfile = (container, rack) => {
+      console.log("Drawing rack profile for:", rack.name);
+      
+      // Create canvas element
+      const canvas = document.createElement('canvas');
+      canvas.width = 200;
+      canvas.height = 720; // Increased height for 42U plus header space and margin
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+      container.appendChild(canvas);
+      
+      const ctx = canvas.getContext('2d');
+      
+      // Background
+      ctx.fillStyle = '#333';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw rack U markers - Start at 50px from the bottom to allow for proper positioning
+      const uHeight = 15; // Height of 1U in pixels
+      const rackStartY = 50; // Space at the bottom of the canvas
+      const headerHeight = 40; // Space at the top for power/temp indicators
+      
+      // Draw U markings
+      ctx.fillStyle = '#666';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'left';
+      
+      for (let u = 0; u <= rack.rackHeightUnits; u++) {
+        const y = canvas.height - rackStartY - (u * uHeight);
+        ctx.fillStyle = '#666';
+        ctx.fillRect(0, y, 10, 1);
+        
+        // Add U numbers every 5U
+        if (u % 5 === 0) {
+          ctx.fillStyle = '#fff';
+          ctx.fillText(u + 'U', 12, y + 4);
+        }
+      }
+      
+      // Draw rack frame with more space at the top for indicators
+      const rackHeight = rack.rackHeightUnits * uHeight;
+      const rackStartYPos = canvas.height - rackStartY - rackHeight;
+      const headerSpace = 70; // Increased space for indicators at the top
+      const rackEndYPos = canvas.height - rackStartY;
+      
+      // Top of rack frame
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(20, rackStartYPos);
+      ctx.lineTo(canvas.width - 20, rackStartYPos);
+      ctx.stroke();
+      
+      // Bottom of rack frame
+      ctx.beginPath();
+      ctx.moveTo(20, rackEndYPos);
+      ctx.lineTo(canvas.width - 20, rackEndYPos);
+      ctx.stroke();
+      
+      // Left side of rack frame
+      ctx.beginPath();
+      ctx.moveTo(20, rackStartYPos);
+      ctx.lineTo(20, rackEndYPos);
+      ctx.stroke();
+      
+      // Right side of rack frame
+      ctx.beginPath();
+      ctx.moveTo(canvas.width - 20, rackStartYPos);
+      ctx.lineTo(canvas.width - 20, rackEndYPos);
+      ctx.stroke();
+      
+      // Draw all equipment in the rack
+      const allEquipment = [...rack.servers, ...rack.networkEquipment];
+      
+      allEquipment.forEach(item => {
+        const y = canvas.height - rackStartY - ((item.position + item.unitSize) * uHeight);
+        const height = item.unitSize * uHeight;
+        
+        // Different colors for servers and network equipment
+        if (item.constructor.name === 'Server') {
+          ctx.fillStyle = '#285f9f'; // Blue for servers
+        } else {
+          // Network equipment colors by type
+          switch(item.type) {
+            case 'SWITCH':
+              ctx.fillStyle = '#2e7d32'; // Green
+              break;
+            case 'PATCH_PANEL':
+              ctx.fillStyle = '#f9a825'; // Yellow
+              break;
+            default:
+              ctx.fillStyle = '#6a1b9a'; // Purple
+          }
+        }
+        
+        ctx.fillRect(25, y, canvas.width - 50, height - 1);
+        
+        // Draw equipment name
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'left';
+        const name = item.constructor.name === 'Server' 
+          ? (item.name || `Server ${item.unitSize}U`) 
+          : (item.name || item.type);
+        ctx.fillText(name, 30, y + (height / 2) + 4);
+        
+        // Draw front LEDs
+        const ledSize = 4;
+        
+        // Status LED - green for powered, red for off
+        ctx.fillStyle = item.powered !== undefined ? (item.powered ? '#22ff22' : '#ff2222') : '#ffff22';
+        ctx.beginPath();
+        ctx.arc(canvas.width - 15, y + 7, ledSize, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Network LED - blue for connected
+        if (item.connected !== undefined) {
+          ctx.fillStyle = item.connected ? '#2222ff' : '#666';
+          ctx.beginPath();
+          ctx.arc(canvas.width - 15, y + 17, ledSize, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+      
+      // Draw power status and temperature indicators at the top of the rack
+      // (above the rack frame) - ABOVE the top U marker
+      const indicatorY = rackStartYPos - headerSpace;
+      
+      // Draw rack name at the very top
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 12px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(rack.name, canvas.width/2, indicatorY + 20);
+      
+      // Header panel background
+      ctx.fillStyle = '#222';
+      ctx.fillRect(25, indicatorY + 30, canvas.width - 50, 30);
+      
+      // Draw control panel background
+      const panelY = indicatorY + 35;
+      ctx.fillStyle = '#222';
+      ctx.fillRect(15, panelY, canvas.width - 30, 30);
+      
+      // Power indicator
+      ctx.fillStyle = '#333';
+      ctx.fillRect(25, panelY + 5, 40, 20);
+      
+      // Power light
+      ctx.fillStyle = rack.hasPower ? '#22ff22' : '#ff2222';
+      ctx.beginPath();
+      ctx.arc(45, panelY + 15, 8, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Power text
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText("POWER", 45, panelY + 35);
+      
+      // Temperature indicator
+      ctx.fillStyle = '#333';
+      ctx.fillRect(canvas.width - 65, panelY + 5, 40, 20);
+      
+      // Temperature display
+      ctx.fillStyle = '#fff';
+      ctx.font = '11px monospace';
+      ctx.textAlign = 'center';
+      const tempColor = rack.temperature > 30 ? '#ff6666' : '#ffffff';
+      ctx.fillStyle = tempColor;
+      ctx.fillText(`${rack.temperature.toFixed(1)}°C`, canvas.width - 45, panelY + 19);
+      
+      // Temperature text
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText("TEMP", canvas.width - 45, panelY + 35);
+      
+      // Calculate power usage percentage (for reference only)
+      const powerUsage = rack.calculateTotalPowerUsage();
+      const powerPercent = Math.min(100, Math.round((powerUsage / rack.powerCapacity) * 100));
+    };
+    
     // Helper function to show network tab
     const showNetworkTab = () => {
       if (rack.networkEquipment.length === 0) {
@@ -1210,6 +1533,8 @@ export class UI {
       overviewTab.style.backgroundColor = '#d4d0c8';
       serversTab.classList.remove('active');
       serversTab.style.backgroundColor = '#bbb';
+      profileTab.classList.remove('active');
+      profileTab.style.backgroundColor = '#bbb';
       networkTab.classList.remove('active');
       networkTab.style.backgroundColor = '#bbb';
       showRackOverview();
@@ -1220,9 +1545,23 @@ export class UI {
       serversTab.style.backgroundColor = '#d4d0c8';
       overviewTab.classList.remove('active');
       overviewTab.style.backgroundColor = '#bbb';
+      profileTab.classList.remove('active');
+      profileTab.style.backgroundColor = '#bbb';
       networkTab.classList.remove('active');
       networkTab.style.backgroundColor = '#bbb';
       showServersTab();
+    });
+    
+    profileTab.addEventListener('click', () => {
+      profileTab.classList.add('active');
+      profileTab.style.backgroundColor = '#d4d0c8';
+      overviewTab.classList.remove('active');
+      overviewTab.style.backgroundColor = '#bbb';
+      serversTab.classList.remove('active');
+      serversTab.style.backgroundColor = '#bbb';
+      networkTab.classList.remove('active');
+      networkTab.style.backgroundColor = '#bbb';
+      showProfileView();
     });
     
     networkTab.addEventListener('click', () => {
@@ -1232,6 +1571,8 @@ export class UI {
       overviewTab.style.backgroundColor = '#bbb';
       serversTab.classList.remove('active');
       serversTab.style.backgroundColor = '#bbb';
+      profileTab.classList.remove('active');
+      profileTab.style.backgroundColor = '#bbb';
       showNetworkTab();
     });
   }

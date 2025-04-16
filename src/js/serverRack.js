@@ -3,9 +3,10 @@ import { Server } from './server.js';
 import { NetworkEquipment } from './networkEquipment.js';
 
 export class ServerRack {
-  constructor(game) {
+  constructor(game, name = null) {
     this.game = game;
     this.id = 'rack-' + Math.random().toString(36).substr(2, 9);
+    this.name = name || `Rack-${this.id.substring(5, 9)}`; // Default name if none provided
     this.container = new THREE.Group();
     this.rackHeight = 42; // 42U rack
     this.servers = [];
@@ -22,6 +23,12 @@ export class ServerRack {
     // Network connectivity
     this.connected = false;
     this.circuitConnection = null;
+    
+    // Power and temperature
+    this.hasPower = true;
+    this.powerCapacity = 2000; // 2 kilowatt capacity
+    this.powerAvailable = 2000; // Available power 
+    this.temperature = 22; // Temperature in Celsius
   }
 
   init(isEmpty = false) {
@@ -58,6 +65,10 @@ export class ServerRack {
       type: 'rack', 
       empty: this.servers.length === 0 && this.networkEquipment.length === 0,
       rackId: this.id,
+      id: this.id,
+      gridX: this.gridX,
+      gridZ: this.gridZ,
+      movable: true,
       interactive: true
     };
     
@@ -66,10 +77,17 @@ export class ServerRack {
       type: 'rack', 
       empty: this.servers.length === 0 && this.networkEquipment.length === 0,
       rackId: this.id,
+      id: this.id,
+      gridX: this.gridX,
+      gridZ: this.gridZ,
+      movable: true,
       interactive: true
     };
     
     this.container.add(rack);
+    
+    // Add floating rack name label above the rack
+    this.addRackNameLabel();
     
     // Add rack rails (vertical supports)
     const railMaterial = new THREE.MeshStandardMaterial({
@@ -159,21 +177,31 @@ export class ServerRack {
     return !networkConflict;
   }
   
-  addServer(position, unitSize) {
+  addServer(position, unitSize, name = null) {
     // Check if position is valid and not already occupied
     if (!this.isPositionAvailable(position, unitSize)) {
       console.error("Invalid server position or size, or position is occupied");
       return null;
     }
     
+    // Check if there's enough power available
+    const serverPower = 150; // Estimated initial power draw
+    if (serverPower > this.powerAvailable) {
+      console.error("Not enough power available in rack");
+      return null;
+    }
+    
     // Create and add the server
-    const server = new Server(this.game, unitSize);
+    const server = new Server(this.game, unitSize, name);
     server.position = position;
     server.init();
     
     // Position server within rack
     const yPos = (position / this.rackHeightUnits) * this.rackHeight * 0.25;
     server.container.position.set(0, yPos, 0);
+    
+    // Update available power
+    this.powerAvailable -= server.powerConsumption;
     
     this.servers.push(server);
     this.container.add(server.container);
@@ -190,12 +218,21 @@ export class ServerRack {
       return null;
     }
     
+    // Check if there's enough power available
+    if (equipment.powerConsumption > this.powerAvailable) {
+      console.error("Not enough power available in rack");
+      return null;
+    }
+    
     equipment.position = position;
     equipment.init();
     
     // Position equipment within rack
     const yPos = (position / this.rackHeightUnits) * this.rackHeight * 0.25;
     equipment.container.position.set(0, yPos, 0);
+    
+    // Update available power
+    this.powerAvailable -= equipment.powerConsumption;
     
     this.networkEquipment.push(equipment);
     this.container.add(equipment.container);
@@ -208,6 +245,10 @@ export class ServerRack {
     
     if (serverIndex !== -1) {
       const server = this.servers[serverIndex];
+      
+      // Return power to the rack
+      this.powerAvailable += server.powerConsumption;
+      
       this.container.remove(server.container);
       this.servers.splice(serverIndex, 1);
     }
@@ -218,6 +259,10 @@ export class ServerRack {
     
     if (equipmentIndex !== -1) {
       const equipment = this.networkEquipment[equipmentIndex];
+      
+      // Return power to the rack
+      this.powerAvailable += equipment.powerConsumption;
+      
       this.container.remove(equipment.container);
       this.networkEquipment.splice(equipmentIndex, 1);
     }
@@ -229,13 +274,21 @@ export class ServerRack {
     const networkUnits = this.networkEquipment.reduce((total, eq) => total + eq.unitSize, 0);
     const totalUsedUnits = serverUnits + networkUnits;
     
+    const totalPowerUsage = this.calculateTotalPowerUsage();
+    
     console.log("Rack details:", {
+      id: this.id,
+      name: this.name,
       totalServers: this.servers.length,
       totalNetworkEquipment: this.networkEquipment.length,
       serverUnits: serverUnits,
       networkUnits: networkUnits,
       totalUsedUnits: totalUsedUnits,
-      availableUnits: this.rackHeightUnits - totalUsedUnits
+      availableUnits: this.rackHeightUnits - totalUsedUnits,
+      temperature: this.temperature.toFixed(1),
+      powerCapacity: this.powerCapacity,
+      powerUsage: totalPowerUsage,
+      powerAvailable: this.powerAvailable
     });
   }
   
@@ -247,5 +300,114 @@ export class ServerRack {
     
     // Then check network equipment
     return this.networkEquipment.find(eq => eq.id === id);
+  }
+  
+  // Calculate total power usage of all equipment in the rack
+  calculateTotalPowerUsage() {
+    let totalPower = 0;
+    
+    // Sum server power usage
+    this.servers.forEach(server => {
+      totalPower += server.powerConsumption;
+    });
+    
+    // Sum network equipment power usage
+    this.networkEquipment.forEach(equipment => {
+      totalPower += equipment.powerConsumption;
+    });
+    
+    return totalPower;
+  }
+  
+  // Update rack temperature based on equipment
+  updateTemperature() {
+    // Base temperature starts at room temperature (22°C)
+    let baseTemp = 22;
+    
+    // Calculate average equipment temperature
+    let totalEquipment = this.servers.length + this.networkEquipment.length;
+    if (totalEquipment > 0) {
+      let totalTemp = 0;
+      
+      // Add server temperatures
+      this.servers.forEach(server => {
+        totalTemp += server.temperature;
+      });
+      
+      // Add network equipment temperatures
+      this.networkEquipment.forEach(equipment => {
+        totalTemp += equipment.temperature;
+      });
+      
+      // Calculate influence of equipment on rack temperature
+      const equipmentInfluence = (totalTemp / totalEquipment) * 0.2; // Equipment affects 20% of rack temp
+      this.temperature = baseTemp + equipmentInfluence;
+      
+      // Update game datacenter temperature if this is too hot
+      if (this.game && this.game.datacenter && this.temperature > 35) {
+        this.game.datacenter.addHeat(this.temperature - 35);
+      }
+    } else {
+      // Empty rack gradually returns to room temperature
+      this.temperature = baseTemp + (this.temperature - baseTemp) * 0.9;
+    }
+    
+    return this.temperature;
+  }
+  
+  // Create and add a 3D text label for the rack name
+  addRackNameLabel() {
+    // Check if label already exists, remove it if so
+    if (this.nameLabel) {
+      this.container.remove(this.nameLabel);
+    }
+    
+    // Create a canvas to render the text
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    const textWidth = 256;
+    const textHeight = 64;
+    canvas.width = textWidth;
+    canvas.height = textHeight;
+    
+    // Fill background with semi-transparent black
+    context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    context.fillRect(0, 0, textWidth, textHeight);
+    
+    // Draw white text
+    context.font = 'bold 24px monospace';
+    context.fillStyle = 'white';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(this.name, textWidth / 2, textHeight / 2);
+    
+    // Create texture from canvas
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    
+    // Create material with texture
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    
+    // Create plane geometry for the label
+    const geometry = new THREE.PlaneGeometry(3, 0.75);
+    
+    // Create mesh and position it above the rack
+    this.nameLabel = new THREE.Mesh(geometry, material);
+    this.nameLabel.position.set(0, this.rackHeight * 0.25 + 0.5, 0); // Position above rack
+    this.nameLabel.rotation.x = -Math.PI / 4; // Tilt slightly for better visibility
+    
+    // Add to rack container
+    this.container.add(this.nameLabel);
+  }
+  
+  // Update the name label when the rack name changes
+  updateRackName(newName) {
+    this.name = newName;
+    this.addRackNameLabel(); // Recreate the label with the new name
   }
 }

@@ -37,6 +37,18 @@ export class Game {
     this.accumulatedTime = 0; // Track accumulated time between updates
     this.accumulatedRevenue = 0; // Track accumulated revenue between updates
     this.accumulatedExpenses = 0; // Track accumulated expenses between updates
+    
+    // Camera movement variables
+    this.keyStates = {}; // Track key states for camera movement
+    this.moveSpeed = 20; // Camera movement speed
+    this.cameraMinHeight = 5; // Minimum height above ground
+    this.cameraMaxHeight = 50; // Maximum height above ground
+    this.datacenterBounds = { 
+      minX: -50, 
+      maxX: 50, 
+      minZ: -50, 
+      maxZ: 50 
+    }; // Boundaries of the datacenter
   }
 
   init() {
@@ -122,6 +134,9 @@ export class Game {
     this.controls.minDistance = 10;
     this.controls.maxDistance = 100;
     this.controls.maxPolarAngle = Math.PI / 2.5;
+    this.controls.enableKeys = false; // Disable default OrbitControls keyboard handling
+    this.controls.enablePan = true; // Enable panning with middle mouse button
+    this.controls.panSpeed = 1.0; // Adjust panning speed
   }
 
   initLights() {
@@ -153,10 +168,17 @@ export class Game {
   initEventListeners() {
     window.addEventListener('resize', this.onWindowResize.bind(this));
     window.addEventListener('mousemove', this.onMouseMove.bind(this));
+    window.addEventListener('mousemove', this.handleExtendedMouseMove.bind(this));
     window.addEventListener('mousedown', this.onMouseDown.bind(this));
     window.addEventListener('mouseup', this.onMouseUp.bind(this));
     window.addEventListener('keydown', this.onKeyDown.bind(this));
     window.addEventListener('keyup', this.onKeyUp.bind(this));
+    
+    // Add a special handler for when window loses focus to clear key states
+    window.addEventListener('blur', () => {
+      console.log("Window lost focus, clearing key states");
+      this.keyStates = {};
+    });
   }
 
   onWindowResize() {
@@ -195,8 +217,9 @@ export class Game {
       this.handleSelection();
     }
   }
-
-  onMouseMove(event) {
+  
+  // Additional onMouseMove handler (extended functionality compared to the one above)
+  handleExtendedMouseMove(event) {
     this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
     
@@ -303,6 +326,21 @@ export class Game {
   }
   
   onKeyDown(event) {
+    // Skip if typing in an input field
+    if (document.activeElement?.tagName === 'INPUT' || 
+        document.activeElement?.tagName === 'TEXTAREA') {
+      return;
+    }
+    
+    // Movement keys list
+    const movementKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D'];
+    
+    // Track key state
+    this.keyStates[event.key] = true;
+    
+    // Log key presses for debugging
+    console.log(`Key pressed: ${event.key}`);
+    
     // Toggle cable mode with 'C' key
     if (event.key === 'c' || event.key === 'C') {
       this.toggleCableMode(true);
@@ -313,9 +351,24 @@ export class Game {
       this.cableManager.cancelCable();
       this.cableDragging = false;
     }
+    
+    // Prevent default behavior for movement keys to avoid page scrolling
+    if (movementKeys.includes(event.key)) {
+      event.preventDefault();
+    }
   }
   
   onKeyUp(event) {
+    // Skip if typing in an input field
+    if (document.activeElement?.tagName === 'INPUT' || 
+        document.activeElement?.tagName === 'TEXTAREA') {
+      return;
+    }
+    
+    // Clear key state
+    this.keyStates[event.key] = false;
+    console.log(`Key released: ${event.key}`);
+    
     // Exit cable mode when releasing 'C' key
     if (event.key === 'c' || event.key === 'C') {
       this.toggleCableMode(false);
@@ -415,13 +468,26 @@ export class Game {
       // Handle object selection logic here
       if (userData.type === 'rack') {
         console.log('Rack selected', currentObj);
+        console.log('Rack userData:', userData);
         
-        // Find the rack
-        const rack = this.findRackByObject(currentObj);
+        // Find the rack by ID first if available
+        let rack = null;
+        if (userData.rackId) {
+          rack = this.datacenter.racks.find(r => r.id === userData.rackId);
+          if (rack) {
+            console.log('Found rack by ID:', rack.id);
+          }
+        }
         
-        if (rack) {
-          console.log('Found rack object:', rack.id);
-        } else {
+        // Fallback to finding by object if needed
+        if (!rack) {
+          rack = this.findRackByObject(currentObj);
+          if (rack) {
+            console.log('Found rack by object traversal:', rack.id);
+          }
+        }
+        
+        if (!rack) {
           console.log('Could not find rack from object');
         }
         
@@ -432,6 +498,7 @@ export class Game {
           this.clickStartPosition = { ...this.mouse };
           this.clickTarget = currentObj;
           this.clickPoint = intersects[0].point;
+          console.log('Click target set for potential drag:', userData.rackId || userData.id);
         } else {
           // Find and show the rack (simpler approach)
           if (rack) {
@@ -639,10 +706,19 @@ export class Game {
       return;
     }
     
-    const rack = this.datacenter.racks.find(r => 
-      r.container === rackContainer || 
-      (r.gridX === rackContainer.userData.gridX && r.gridZ === rackContainer.userData.gridZ)
-    );
+    // Try to find rack by rackId first (most reliable)
+    let rack = null;
+    if (rackContainer.userData && rackContainer.userData.rackId) {
+      rack = this.datacenter.racks.find(r => r.id === rackContainer.userData.rackId);
+    }
+    
+    // Fallback to finding by container reference or grid position
+    if (!rack) {
+      rack = this.datacenter.racks.find(r => 
+        r.container === rackContainer || 
+        (r.gridX === rackContainer.userData.gridX && r.gridZ === rackContainer.userData.gridZ)
+      );
+    }
     
     if (!rack) {
       console.error('Could not find rack data for dragging');
@@ -653,8 +729,15 @@ export class Game {
     this.rackDragMode = true;
     this.draggedRack = rack;
     
-    // Disable orbit controls while dragging
+    // Disable all controls while dragging
     this.controls.enabled = false;
+    
+    // Also clear any keyboard movement that might be in progress
+    // by clearing the key states for movement keys
+    const movementKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D'];
+    movementKeys.forEach(key => {
+      this.keyStates[key] = false;
+    });
     
     // Store the start position of the dragged rack
     this.dragStartPosition.copy(rack.container.position);
@@ -665,6 +748,20 @@ export class Game {
       0, // Y offset is always 0 since we're dragging on the ground
       intersectionPoint.z - rack.container.position.z
     );
+    
+    // Save original controls state to restore later
+    this.originalControlsState = {
+      enabled: this.controls.enabled,
+      enablePan: this.controls.enablePan,
+      enableZoom: this.controls.enableZoom,
+      enableRotate: this.controls.enableRotate
+    };
+    
+    // Disable ALL controls functionalities during drag
+    this.controls.enabled = false;
+    this.controls.enablePan = false;
+    this.controls.enableZoom = false;
+    this.controls.enableRotate = false;
     
     // Create grid highlights
     this.createGridHighlights();
@@ -720,16 +817,38 @@ export class Game {
     if (target && target.valid) {
       // Update the rack position in the datacenter
       this.datacenter.moveRack(this.draggedRack, target.x, target.z);
+      console.log('Rack moved successfully to new position');
     } else {
       // Invalid position, return to the original position
       this.draggedRack.container.position.copy(this.dragStartPosition);
+      console.log('Invalid position, returning rack to original position');
     }
     
     // Clean up
     this.rackDragMode = false;
+    
+    // Keep a reference to the rack we just dropped for debugging
+    const droppedRack = this.draggedRack;
     this.draggedRack = null;
     this.targetGridPosition = null;
-    this.controls.enabled = true;
+    
+    // Check rack userData after drop to ensure it's properly maintained
+    console.log('Dropped rack userData:', droppedRack.container.userData);
+    
+    // Restore original control states
+    if (this.originalControlsState) {
+      this.controls.enabled = this.originalControlsState.enabled;
+      this.controls.enablePan = this.originalControlsState.enablePan;
+      this.controls.enableZoom = this.originalControlsState.enableZoom;
+      this.controls.enableRotate = this.originalControlsState.enableRotate;
+      this.originalControlsState = null;
+    } else {
+      // Fallback if original state wasn't saved
+      this.controls.enabled = true;
+      this.controls.enablePan = true;
+      this.controls.enableZoom = true;
+      this.controls.enableRotate = true;
+    }
     
     // Remove grid highlights
     this.removeGridHighlights();
@@ -738,6 +857,11 @@ export class Game {
     if (this.cableManager) {
       this.cableManager.updateAllCables();
     }
+    
+    // Delay for a small amount of time to ensure all state is updated before user can interact again
+    setTimeout(() => {
+      console.log('Rack drag/drop operation fully complete');
+    }, 50);
   }
   
   // Create visual grid highlights for rack placement
@@ -858,8 +982,23 @@ export class Game {
     
     const delta = this.clock.getDelta();
     
-    // Update controls
-    this.controls.update();
+    // Special handling for rack dragging - completely freeze camera controls
+    if (this.rackDragMode) {
+      // Do not update camera controls during rack dragging
+      // This prevents any camera movement or rotation
+    } 
+    // Handle keyboard camera movement
+    else if (this.isKeyboardNavigationActive()) {
+      // If keyboard is being used, take full control of the camera
+      this.controls.enabled = false;
+      this.updateCameraPosition(delta);
+    } 
+    // Normal orbit controls mode
+    else {
+      // Otherwise, let OrbitControls handle camera
+      this.controls.enabled = true;
+      this.controls.update();
+    }
     
     // Update datacenter simulation
     if (this.datacenter) {
@@ -926,6 +1065,87 @@ export class Game {
     
     // Render scene
     this.renderer.render(this.scene, this.camera);
+  }
+  
+  // Check if keyboard navigation is currently active
+  isKeyboardNavigationActive() {
+    // Don't use keyboard navigation in these situations:
+    // 1. In cable mode
+    // 2. If a modal is open
+    // 3. If the user is dragging a rack
+    if (this.cableMode || 
+        this.ui?.modalOverlay?.style.display === 'flex' ||
+        this.rackDragMode || 
+        this.isMouseDown) {
+      return false;
+    }
+    
+    // Check if any movement keys are pressed
+    const movementKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D'];
+    return movementKeys.some(key => this.keyStates[key]);
+  }
+  
+  // Update camera position based on keyboard input
+  updateCameraPosition(delta) {
+    // Calculate a simpler movement based on camera's current orientation
+    const moveSpeed = this.moveSpeed * delta;
+    
+    // Get forward and right directions
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+    
+    // Remove Y component to keep movement horizontal
+    forward.y = 0;
+    forward.normalize();
+    right.y = 0;
+    right.normalize();
+    
+    // Apply movement based on keys pressed
+    if (this.keyStates['w'] || this.keyStates['W'] || this.keyStates['ArrowUp']) {
+      this.camera.position.addScaledVector(forward, moveSpeed);
+      console.log("Moving forward");
+    }
+    
+    if (this.keyStates['s'] || this.keyStates['S'] || this.keyStates['ArrowDown']) {
+      this.camera.position.addScaledVector(forward, -moveSpeed);
+      console.log("Moving backward");
+    }
+    
+    if (this.keyStates['a'] || this.keyStates['A'] || this.keyStates['ArrowLeft']) {
+      this.camera.position.addScaledVector(right, -moveSpeed);
+      console.log("Moving left");
+    }
+    
+    if (this.keyStates['d'] || this.keyStates['D'] || this.keyStates['ArrowRight']) {
+      this.camera.position.addScaledVector(right, moveSpeed);
+      console.log("Moving right");
+    }
+    
+    // Apply height limits
+    this.camera.position.y = Math.max(this.cameraMinHeight, 
+                                    Math.min(this.cameraMaxHeight, 
+                                           this.camera.position.y));
+    
+    // Apply horizontal boundaries
+    this.camera.position.x = Math.max(this.datacenterBounds.minX, 
+                                    Math.min(this.datacenterBounds.maxX, 
+                                           this.camera.position.x));
+    
+    this.camera.position.z = Math.max(this.datacenterBounds.minZ, 
+                                    Math.min(this.datacenterBounds.maxZ, 
+                                           this.camera.position.z));
+                                           
+    // Set the look target 10 units in front of the camera
+    const lookTarget = new THREE.Vector3(0, 0, -1)
+      .applyQuaternion(this.camera.quaternion)
+      .multiplyScalar(10)
+      .add(this.camera.position);
+    
+    // Keep the camera looking slightly downward
+    lookTarget.y = Math.max(0, this.camera.position.y - 5);
+    
+    // Update the orbit controls target
+    this.controls.target.copy(lookTarget);
   }
   
   // Check if a server is properly connected to internet
