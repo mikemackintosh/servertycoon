@@ -185,7 +185,15 @@ export class UI {
       
       // Add click handlers
       itemElement.addEventListener('click', () => {
-        if (item.label === 'Show All Windows') {
+        if (item.label === 'New Game') {
+          if (confirm('Start a new game? Any unsaved progress will be lost.')) {
+            window.location.reload();
+          }
+        } else if (item.label === 'Save Game') {
+          this.showSaveGameDialog();
+        } else if (item.label === 'Load Game') {
+          this.showLoadGameDialog();
+        } else if (item.label === 'Show All Windows') {
           this.showAllPanels();
         } else if (item.label === 'Hide All Windows') {
           this.hideAllPanels();
@@ -588,6 +596,250 @@ export class UI {
     this.statusTimeout = setTimeout(() => {
       this.statusMessage.style.display = 'none';
     }, duration);
+  }
+  
+  // Show save game dialog
+  showSaveGameDialog() {
+    this.closeAllMenus();
+    
+    // Create modal content
+    const content = document.createElement('div');
+    content.innerHTML = `
+      <h2 style="margin-top: 0; padding-bottom: 10px; border-bottom: 1px solid #999;">Save Game</h2>
+      <p>Choose a save slot to save your current game:</p>
+      <div id="save-slots" style="margin: 15px 0; display: flex; flex-direction: column; gap: 10px;"></div>
+      <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
+        <button id="save-cancel-btn" style="margin-right: 10px;">Cancel</button>
+      </div>
+    `;
+    
+    // Show modal
+    this.openModal(content);
+    
+    // Get slots container
+    const slotsContainer = document.getElementById('save-slots');
+    
+    // Load save metadata
+    const metaKey = `${this.game.saveName}_meta`;
+    const metadata = JSON.parse(localStorage.getItem(metaKey) || '{}');
+    
+    // Create slot buttons
+    for (let i = 1; i <= this.game.saveSlots; i++) {
+      const slotInfo = metadata[i] || null;
+      
+      const slotBtn = document.createElement('div');
+      slotBtn.style.padding = '10px';
+      slotBtn.style.border = '1px solid #999';
+      slotBtn.style.backgroundColor = '#eee';
+      slotBtn.style.cursor = 'pointer';
+      slotBtn.style.display = 'flex';
+      slotBtn.style.justifyContent = 'space-between';
+      slotBtn.style.alignItems = 'center';
+      
+      if (slotInfo) {
+        // Slot has save data
+        const date = new Date(slotInfo.timestamp);
+        slotBtn.innerHTML = `
+          <div>
+            <strong>Slot ${i}</strong>
+            <div>Saved: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}</div>
+            <div>Funds: $${slotInfo.funds.toFixed(2)}, Racks: ${slotInfo.racks}</div>
+          </div>
+          <button class="save-slot-btn" data-slot="${i}">Save</button>
+        `;
+      } else {
+        // Empty slot
+        slotBtn.innerHTML = `
+          <div>
+            <strong>Slot ${i}</strong>
+            <div>Empty save slot</div>
+          </div>
+          <button class="save-slot-btn" data-slot="${i}">Save</button>
+        `;
+      }
+      
+      slotsContainer.appendChild(slotBtn);
+    }
+    
+    // Add event listeners
+    document.querySelectorAll('.save-slot-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const slot = parseInt(e.target.dataset.slot);
+        
+        // Confirm if slot contains existing save
+        if (metadata[slot] && !confirm(`Overwrite existing save in slot ${slot}?`)) {
+          return;
+        }
+        
+        // Save game
+        if (this.game.saveGame(slot)) {
+          this.showStatusMessage(`Game saved to slot ${slot}`, 3000);
+          this.closeModal();
+        } else {
+          this.showStatusMessage('Failed to save game', 3000);
+        }
+      });
+    });
+    
+    // Cancel button
+    document.getElementById('save-cancel-btn').addEventListener('click', () => {
+      this.closeModal();
+    });
+  }
+  
+  // Show load game dialog
+  showLoadGameDialog() {
+    this.closeAllMenus();
+    
+    // Create modal content
+    const content = document.createElement('div');
+    content.innerHTML = `
+      <h2 style="margin-top: 0; padding-bottom: 10px; border-bottom: 1px solid #999;">Load Game</h2>
+      <p>Choose a save to load:</p>
+      <div id="load-slots" style="margin: 15px 0; display: flex; flex-direction: column; gap: 10px;"></div>
+      <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
+        <button id="load-cancel-btn" style="margin-right: 10px;">Cancel</button>
+      </div>
+    `;
+    
+    // Show modal
+    this.openModal(content);
+    
+    // Get slots container
+    const slotsContainer = document.getElementById('load-slots');
+    
+    // Load save metadata
+    const metaKey = `${this.game.saveName}_meta`;
+    const metadata = JSON.parse(localStorage.getItem(metaKey) || '{}');
+    
+    // Check for autosave
+    const autoSaveKey = `${this.game.saveName}_autosave`;
+    const autoSaveData = localStorage.getItem(autoSaveKey);
+    
+    if (autoSaveData) {
+      try {
+        const autoSave = JSON.parse(autoSaveData);
+        const date = new Date(autoSave.timestamp);
+        
+        const slotBtn = document.createElement('div');
+        slotBtn.style.padding = '10px';
+        slotBtn.style.border = '1px solid #999';
+        slotBtn.style.backgroundColor = '#eee';
+        slotBtn.style.cursor = 'pointer';
+        slotBtn.style.display = 'flex';
+        slotBtn.style.justifyContent = 'space-between';
+        slotBtn.style.alignItems = 'center';
+        
+        slotBtn.innerHTML = `
+          <div>
+            <strong>Auto-Save</strong>
+            <div>Saved: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}</div>
+            <div>Funds: $${autoSave.datacenter.funds.toFixed(2)}, Racks: ${autoSave.datacenter.racks.length}</div>
+          </div>
+          <div>
+            <button class="load-slot-btn" data-slot="0">Load</button>
+            <button class="delete-slot-btn" data-slot="0">Delete</button>
+          </div>
+        `;
+        
+        slotsContainer.appendChild(slotBtn);
+      } catch (e) {
+        console.error('Error parsing autosave data:', e);
+      }
+    }
+    
+    // Create slot buttons for regular saves
+    let hasSaves = autoSaveData !== null;
+    
+    for (let i = 1; i <= this.game.saveSlots; i++) {
+      const slotInfo = metadata[i] || null;
+      
+      if (slotInfo) {
+        hasSaves = true;
+        
+        const slotBtn = document.createElement('div');
+        slotBtn.style.padding = '10px';
+        slotBtn.style.border = '1px solid #999';
+        slotBtn.style.backgroundColor = '#eee';
+        slotBtn.style.cursor = 'pointer';
+        slotBtn.style.display = 'flex';
+        slotBtn.style.justifyContent = 'space-between';
+        slotBtn.style.alignItems = 'center';
+        
+        const date = new Date(slotInfo.timestamp);
+        slotBtn.innerHTML = `
+          <div>
+            <strong>Slot ${i}</strong>
+            <div>Saved: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}</div>
+            <div>Funds: $${slotInfo.funds.toFixed(2)}, Racks: ${slotInfo.racks}</div>
+          </div>
+          <div>
+            <button class="load-slot-btn" data-slot="${i}">Load</button>
+            <button class="delete-slot-btn" data-slot="${i}">Delete</button>
+          </div>
+        `;
+        
+        slotsContainer.appendChild(slotBtn);
+      }
+    }
+    
+    // Show message if no saves found
+    if (!hasSaves) {
+      const noSaves = document.createElement('div');
+      noSaves.textContent = 'No saved games found.';
+      noSaves.style.padding = '20px';
+      noSaves.style.textAlign = 'center';
+      noSaves.style.backgroundColor = '#f5f5f5';
+      noSaves.style.border = '1px solid #ddd';
+      slotsContainer.appendChild(noSaves);
+    }
+    
+    // Add event listeners
+    document.querySelectorAll('.load-slot-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const slot = parseInt(e.target.dataset.slot);
+        
+        // Confirm load
+        if (!confirm(`Load game from ${slot === 0 ? 'auto-save' : 'slot ' + slot}? Current progress will be lost.`)) {
+          return;
+        }
+        
+        // Load game
+        if (this.game.loadGame(slot)) {
+          this.showStatusMessage(`Game loaded from ${slot === 0 ? 'auto-save' : 'slot ' + slot}`, 3000);
+          this.closeModal();
+        } else {
+          this.showStatusMessage('Failed to load game', 3000);
+        }
+      });
+    });
+    
+    // Delete buttons
+    document.querySelectorAll('.delete-slot-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const slot = parseInt(e.target.dataset.slot);
+        
+        // Confirm delete
+        if (!confirm(`Delete save ${slot === 0 ? 'auto-save' : 'in slot ' + slot}? This cannot be undone.`)) {
+          return;
+        }
+        
+        // Delete save
+        if (this.game.deleteSave(slot)) {
+          this.showStatusMessage(`Save ${slot === 0 ? 'auto-save' : 'in slot ' + slot} deleted`, 3000);
+          // Refresh the dialog
+          this.closeModal();
+          this.showLoadGameDialog();
+        } else {
+          this.showStatusMessage('Failed to delete save', 3000);
+        }
+      });
+    });
+    
+    // Cancel button
+    document.getElementById('load-cancel-btn').addEventListener('click', () => {
+      this.closeModal();
+    });
   }
   
   openModal(content) {

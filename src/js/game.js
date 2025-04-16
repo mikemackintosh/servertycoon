@@ -49,6 +49,13 @@ export class Game {
       minZ: -50, 
       maxZ: 50 
     }; // Boundaries of the datacenter
+    
+    // Game save/load functionality
+    this.autoSaveInterval = 5 * 60; // Auto-save every 5 minutes
+    this.timeSinceLastSave = 0;
+    this.saveSlots = 3; // Number of available save slots
+    this.currentSaveSlot = 1; // Default save slot
+    this.saveName = "ServerTycoon"; // Base name for save files
   }
 
   init() {
@@ -61,7 +68,21 @@ export class Game {
     this.initCableManager();
     this.initUI();
     this.initEventListeners();
+    this.initSaveSystem();
     this.animate();
+  }
+  
+  // Initialize the save/load system
+  initSaveSystem() {
+    console.log("Initializing save system...");
+    
+    // Check if we have a previously saved game to load
+    this.checkForSavedGames();
+    
+    // Set up auto-save interval
+    this.autoSaveIntervalId = setInterval(() => {
+      this.autoSave();
+    }, this.autoSaveInterval * 1000);
   }
   
   initUI() {
@@ -1038,6 +1059,9 @@ export class Game {
       this.accumulatedExpenses += expenses;
       this.accumulatedTime += delta;
       
+      // Update time since last save for auto-save feature
+      this.timeSinceLastSave += delta;
+      
       // Check if it's time to update funds (every 30 seconds)
       if (this.accumulatedTime >= this.fundsUpdateInterval) {
         // Calculate net income from accumulated values
@@ -1065,6 +1089,405 @@ export class Game {
     
     // Render scene
     this.renderer.render(this.scene, this.camera);
+  }
+  
+  // Auto-save the game periodically
+  autoSave() {
+    if (this.timeSinceLastSave >= this.autoSaveInterval) {
+      console.log("Auto-saving game...");
+      this.saveGame(0); // Use slot 0 for auto-saves
+      this.timeSinceLastSave = 0;
+      
+      // Show a notification to the user
+      if (this.ui) {
+        this.ui.showStatusMessage("Game auto-saved", 3000);
+      }
+    }
+  }
+  
+  // Check for existing saved games
+  checkForSavedGames() {
+    // Check for autosave
+    const autoSaveKey = `${this.saveName}_autosave`;
+    const autoSaveData = localStorage.getItem(autoSaveKey);
+    
+    if (autoSaveData) {
+      console.log("Found auto-save data");
+    }
+    
+    // Check all save slots
+    const saveData = [];
+    for (let i = 1; i <= this.saveSlots; i++) {
+      const key = `${this.saveName}_slot${i}`;
+      const data = localStorage.getItem(key);
+      
+      if (data) {
+        try {
+          const parsed = JSON.parse(data);
+          saveData.push({
+            slot: i,
+            timestamp: parsed.timestamp,
+            funds: parsed.datacenter.funds,
+            racks: parsed.datacenter.racks.length
+          });
+          console.log(`Found save data in slot ${i} from ${new Date(parsed.timestamp).toLocaleString()}`);
+        } catch (e) {
+          console.error(`Error parsing save data in slot ${i}:`, e);
+        }
+      }
+    }
+    
+    // Store available save data for UI to display
+    this.availableSaves = saveData;
+    return saveData.length > 0;
+  }
+  
+  // Save game data to localStorage
+  saveGame(slot = this.currentSaveSlot) {
+    try {
+      // Create a key for this save slot
+      const key = slot === 0 ? `${this.saveName}_autosave` : `${this.saveName}_slot${slot}`;
+      
+      // Collect game state
+      const gameState = this.collectGameState();
+      
+      // Store in localStorage
+      localStorage.setItem(key, JSON.stringify(gameState));
+      
+      // Update metadata for the save
+      const metaKey = `${this.saveName}_meta`;
+      const metadata = JSON.parse(localStorage.getItem(metaKey) || '{}');
+      metadata[slot] = {
+        timestamp: gameState.timestamp,
+        funds: gameState.datacenter.funds,
+        racks: gameState.datacenter.racks.length
+      };
+      localStorage.setItem(metaKey, JSON.stringify(metadata));
+      
+      console.log(`Game saved to slot ${slot}`);
+      return true;
+    } catch (error) {
+      console.error("Error saving game:", error);
+      return false;
+    }
+  }
+  
+  // Load game data from localStorage
+  loadGame(slot = this.currentSaveSlot) {
+    try {
+      // Create a key for this save slot
+      const key = slot === 0 ? `${this.saveName}_autosave` : `${this.saveName}_slot${slot}`;
+      
+      // Get saved data
+      const saveData = localStorage.getItem(key);
+      if (!saveData) {
+        console.error(`No save data found in slot ${slot}`);
+        return false;
+      }
+      
+      // Parse saved data
+      const gameState = JSON.parse(saveData);
+      
+      // Apply game state
+      this.applyGameState(gameState);
+      
+      console.log(`Game loaded from slot ${slot}`);
+      return true;
+    } catch (error) {
+      console.error("Error loading game:", error);
+      return false;
+    }
+  }
+  
+  // Delete saved game
+  deleteSave(slot = this.currentSaveSlot) {
+    try {
+      // Create a key for this save slot
+      const key = slot === 0 ? `${this.saveName}_autosave` : `${this.saveName}_slot${slot}`;
+      
+      // Remove from localStorage
+      localStorage.removeItem(key);
+      
+      // Update metadata
+      const metaKey = `${this.saveName}_meta`;
+      const metadata = JSON.parse(localStorage.getItem(metaKey) || '{}');
+      delete metadata[slot];
+      localStorage.setItem(metaKey, JSON.stringify(metadata));
+      
+      console.log(`Deleted save in slot ${slot}`);
+      return true;
+    } catch (error) {
+      console.error("Error deleting save:", error);
+      return false;
+    }
+  }
+  
+  // Collect current game state for saving
+  collectGameState() {
+    const gameState = {
+      version: "1.0",
+      timestamp: Date.now(),
+      datacenter: {
+        funds: this.datacenter.funds,
+        powerUsage: this.datacenter.powerUsage,
+        temperature: this.datacenter.temperature,
+        circuitUtilization: this.datacenter.circuitUtilization,
+        racks: this.datacenter.racks.map(rack => this.serializeRack(rack)),
+        egressRouter: this.datacenter.egressRouter ? this.serializeEgressRouter(this.datacenter.egressRouter) : null
+      },
+      camera: {
+        position: {
+          x: this.camera.position.x,
+          y: this.camera.position.y,
+          z: this.camera.position.z
+        },
+        rotation: {
+          x: this.camera.rotation.x,
+          y: this.camera.rotation.y,
+          z: this.camera.rotation.z
+        }
+      }
+    };
+    
+    return gameState;
+  }
+  
+  // Helper methods to serialize objects for saving
+  serializeRack(rack) {
+    return {
+      id: rack.id,
+      name: rack.name,
+      gridX: rack.gridX,
+      gridZ: rack.gridZ,
+      powerCapacity: rack.powerCapacity,
+      powerAvailable: rack.powerAvailable,
+      temperature: rack.temperature,
+      servers: rack.servers.map(server => this.serializeServer(server)),
+      networkEquipment: rack.networkEquipment.map(equipment => this.serializeNetworkEquipment(equipment))
+    };
+  }
+  
+  serializeServer(server) {
+    return {
+      id: server.id,
+      name: server.name,
+      position: server.position,
+      unitSize: server.unitSize,
+      powerConsumption: server.powerConsumption,
+      temperature: server.temperature,
+      connected: server.connected,
+      ipAddress: server.ipAddress,
+      revenue: server.revenue,
+      specs: server.specs || {}
+    };
+  }
+  
+  serializeNetworkEquipment(equipment) {
+    return {
+      id: equipment.id,
+      type: equipment.type,
+      name: equipment.name,
+      position: equipment.position,
+      unitSize: equipment.unitSize,
+      powerConsumption: equipment.powerConsumption,
+      temperature: equipment.temperature,
+      ports: equipment.ports.map(port => ({
+        id: port.id,
+        type: port.type,
+        connected: port.connected,
+        connectedTo: port.connectedTo
+      })),
+      specs: equipment.specs || {}
+    };
+  }
+  
+  serializeEgressRouter(router) {
+    return {
+      id: router.id,
+      name: router.name || "Egress Router",
+      circuits: router.circuits.map(circuit => ({
+        id: circuit.id,
+        type: circuit.type,
+        bandwidth: circuit.bandwidth,
+        cost: circuit.cost,
+        utilization: circuit.utilization
+      }))
+    };
+  }
+  
+  // Apply loaded game state
+  applyGameState(gameState) {
+    // Check version compatibility
+    if (gameState.version !== "1.0") {
+      console.warn(`Save version ${gameState.version} may not be fully compatible with current game version`);
+    }
+    
+    // Clear current datacenter
+    this.scene.remove(this.datacenter.container);
+    
+    // Recreate datacenter
+    this.initDatacenter();
+    
+    // Apply datacenter properties
+    this.datacenter.funds = gameState.datacenter.funds;
+    this.datacenter.powerUsage = gameState.datacenter.powerUsage;
+    this.datacenter.temperature = gameState.datacenter.temperature;
+    this.datacenter.circuitUtilization = gameState.datacenter.circuitUtilization;
+    
+    // Clear initial racks
+    for (const rack of [...this.datacenter.racks]) {
+      this.datacenter.container.remove(rack.container);
+    }
+    this.datacenter.racks = [];
+    
+    // Recreate racks with equipment
+    for (const rackData of gameState.datacenter.racks) {
+      this.recreateRack(rackData);
+    }
+    
+    // Restore egress router if present
+    if (gameState.datacenter.egressRouter) {
+      this.recreateEgressRouter(gameState.datacenter.egressRouter);
+    }
+    
+    // Restore camera position
+    if (gameState.camera) {
+      this.camera.position.set(
+        gameState.camera.position.x,
+        gameState.camera.position.y,
+        gameState.camera.position.z
+      );
+      this.camera.rotation.set(
+        gameState.camera.rotation.x,
+        gameState.camera.rotation.y,
+        gameState.camera.rotation.z
+      );
+      this.controls.update();
+    }
+    
+    // Update UI
+    if (this.ui) {
+      this.ui.updateMenuStats();
+    }
+    
+    // Show notification
+    if (this.ui) {
+      this.ui.showStatusMessage("Game loaded successfully", 3000);
+    }
+  }
+  
+  // Helper methods to recreate objects from save data
+  recreateRack(rackData) {
+    // Add a new empty rack at the saved position
+    const rack = this.datacenter.addRack(rackData.gridX, rackData.gridZ, true);
+    
+    if (!rack) {
+      console.error(`Failed to create rack at position (${rackData.gridX}, ${rackData.gridZ})`);
+      return null;
+    }
+    
+    // Update rack properties
+    rack.id = rackData.id; // Restore the original ID
+    rack.name = rackData.name;
+    rack.powerCapacity = rackData.powerCapacity;
+    rack.powerAvailable = rackData.powerAvailable;
+    rack.temperature = rackData.temperature;
+    
+    // Update rack name label
+    rack.updateRackName(rackData.name);
+    
+    // Recreate servers
+    for (const serverData of rackData.servers) {
+      this.recreateServer(rack, serverData);
+    }
+    
+    // Recreate network equipment
+    for (const equipmentData of rackData.networkEquipment) {
+      this.recreateNetworkEquipment(rack, equipmentData);
+    }
+    
+    return rack;
+  }
+  
+  recreateServer(rack, serverData) {
+    // Add server to rack
+    const server = rack.addServer(serverData.position, serverData.unitSize, serverData.name);
+    
+    if (!server) {
+      console.error(`Failed to add server to rack at position ${serverData.position}`);
+      return null;
+    }
+    
+    // Restore server properties
+    server.id = serverData.id; // Restore original ID
+    server.powerConsumption = serverData.powerConsumption;
+    server.temperature = serverData.temperature;
+    server.connected = serverData.connected;
+    server.ipAddress = serverData.ipAddress;
+    server.revenue = serverData.revenue;
+    server.specs = serverData.specs || {};
+    
+    return server;
+  }
+  
+  recreateNetworkEquipment(rack, equipmentData) {
+    // Add network equipment to rack
+    const equipment = rack.addNetworkEquipment(
+      equipmentData.type, 
+      equipmentData.position, 
+      equipmentData.specs || {}
+    );
+    
+    if (!equipment) {
+      console.error(`Failed to add ${equipmentData.type} to rack at position ${equipmentData.position}`);
+      return null;
+    }
+    
+    // Restore equipment properties
+    equipment.id = equipmentData.id; // Restore original ID
+    equipment.name = equipmentData.name;
+    equipment.powerConsumption = equipmentData.powerConsumption;
+    equipment.temperature = equipmentData.temperature;
+    
+    // Restore port connections (references will need to be fixed in a second pass)
+    equipment.ports.forEach((port, index) => {
+      if (index < equipmentData.ports.length) {
+        port.connected = equipmentData.ports[index].connected;
+        port.connectedTo = equipmentData.ports[index].connectedTo;
+      }
+    });
+    
+    return equipment;
+  }
+  
+  recreateEgressRouter(routerData) {
+    // Assuming egress router already exists in datacenter initialization
+    if (!this.datacenter.egressRouter) {
+      console.error("No egress router found in datacenter");
+      return null;
+    }
+    
+    // Update properties
+    this.datacenter.egressRouter.id = routerData.id;
+    
+    // Clear existing circuits
+    this.datacenter.egressRouter.circuits = [];
+    
+    // Recreate circuits
+    for (const circuitData of routerData.circuits) {
+      const circuit = this.datacenter.egressRouter.addCircuit(
+        circuitData.type,
+        circuitData.bandwidth
+      );
+      
+      if (circuit) {
+        circuit.id = circuitData.id;
+        circuit.cost = circuitData.cost;
+        circuit.utilization = circuitData.utilization;
+      }
+    }
+    
+    return this.datacenter.egressRouter;
   }
   
   // Check if keyboard navigation is currently active
