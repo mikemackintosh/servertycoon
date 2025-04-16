@@ -48,155 +48,135 @@ export class Circuit {
     this.name = this.specs.name;
     this.speed = this.specs.speed;
     this.cost = this.specs.cost;
-    this.status = 'active';
-    this.uptime = 100; // Percentage
-    this.utilization = 0; // Percentage
+    this.monthlyCost = this.specs.cost; // Set for easier access
+    this.maxConnections = this.specs.maxConnections;
     this.connections = [];
-    this.ipRange = this.generateIpRange();
+    this.utilization = 0;
     this.mesh = null;
-  }
-  
-  generateIpRange() {
-    // Generate a random private IP range
-    const firstOctet = 10;
-    const secondOctet = Math.floor(Math.random() * 255);
-    const thirdOctet = Math.floor(Math.random() * 255);
     
-    return {
-      network: `${firstOctet}.${secondOctet}.${thirdOctet}.0/24`,
-      gateway: `${firstOctet}.${secondOctet}.${thirdOctet}.1`,
-      usable: `${firstOctet}.${secondOctet}.${thirdOctet}.2 - ${firstOctet}.${secondOctet}.${thirdOctet}.254`,
-      broadcast: `${firstOctet}.${secondOctet}.${thirdOctet}.255`,
-      allocatedIps: {}
+    // Setup IP range (for simulation)
+    this.ipRange = {
+      base: `10.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
+      gateway: `10.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.1`,
+      assignedIps: {}
     };
   }
   
-  allocateIp(deviceId, deviceName) {
-    // Find the next available IP
-    for (let i = 2; i <= 254; i++) {
-      const ipAddress = `${this.ipRange.network.split('.')[0]}.${this.ipRange.network.split('.')[1]}.${this.ipRange.network.split('.')[2]}.${i}`;
-      
-      if (!Object.values(this.ipRange.allocatedIps).includes(ipAddress)) {
-        this.ipRange.allocatedIps[deviceId] = {
-          ip: ipAddress,
-          name: deviceName,
-          allocated: new Date().toISOString()
-        };
-        return ipAddress;
-      }
-    }
-    
-    // No IPs available
-    return null;
-  }
-  
-  releaseIp(deviceId) {
-    if (this.ipRange.allocatedIps[deviceId]) {
-      delete this.ipRange.allocatedIps[deviceId];
-      return true;
-    }
-    return false;
-  }
-  
   addConnection(equipmentId, portId) {
-    if (this.connections.length >= this.specs.maxConnections) {
-      console.error('Circuit reached maximum connections');
+    if (this.connections.length >= this.maxConnections) {
+      console.error('Circuit has reached maximum connection limit');
       return false;
     }
     
     this.connections.push({
       equipmentId: equipmentId,
       portId: portId,
-      status: 'up',
-      ipAddress: null // Will be set when connected to a device
+      connected: true,
+      timestamp: new Date()
     });
     
     return true;
   }
   
   removeConnection(equipmentId, portId) {
-    const index = this.connections.findIndex(
-      conn => conn.equipmentId === equipmentId && conn.portId === portId
+    const connectionIndex = this.connections.findIndex(
+      c => c.equipmentId === equipmentId && c.portId === portId
     );
     
-    if (index !== -1) {
-      this.connections.splice(index, 1);
+    if (connectionIndex !== -1) {
+      this.connections.splice(connectionIndex, 1);
+      
+      // Remove IP allocation
+      if (this.ipRange.assignedIps[equipmentId]) {
+        delete this.ipRange.assignedIps[equipmentId];
+      }
+      
       return true;
     }
     
     return false;
   }
   
-  update(deltaTime) {
-    // Simulate random utilization changes based on number of connections
-    const baseUtilization = (this.connections.length / this.specs.maxConnections) * 70;
-    this.utilization = Math.min(100, Math.max(0, baseUtilization + (Math.random() - 0.5) * 10));
+  allocateIp(equipmentId, equipmentName) {
+    // If already allocated, return that IP
+    if (this.ipRange.assignedIps[equipmentId]) {
+      return this.ipRange.assignedIps[equipmentId];
+    }
     
-    // Very small chance of circuit going down temporarily
-    if (Math.random() < 0.0001) {
-      this.status = 'down';
-      setTimeout(() => {
-        this.status = 'active';
-      }, Math.random() * 10000 + 5000); // 5-15 seconds downtime
+    // Generate a new IP in the range (simple simulation)
+    const ipIndex = Object.keys(this.ipRange.assignedIps).length + 2; // start at .2
+    if (ipIndex > 254) {
+      console.error('No more IPs available in range');
+      return null;
+    }
+    
+    const ipAddress = `${this.ipRange.base}.${ipIndex}`;
+    this.ipRange.assignedIps[equipmentId] = ipAddress;
+    
+    console.log(`Allocated IP ${ipAddress} to ${equipmentName}`);
+    return ipAddress;
+  }
+  
+  update(delta) {
+    // Simulate utilization changes
+    if (delta) {
+      // Add some random variance to utilization (+/- 0.5% per second)
+      this.utilization = Math.max(0, Math.min(1, 
+        this.utilization + (Math.random() * 0.01 - 0.005) * delta
+      ));
     }
     
     return {
-      cost: this.cost * (deltaTime / (30 * 24 * 60 * 60)) // Pro-rated monthly cost for time period
+      utilization: this.utilization,
+      cost: this.cost * delta / (30 * 24 * 60 * 60) // Pro-rate cost for the time period
     };
   }
 }
 
 export class EgressRouter {
-  constructor(game, position = { x: 0, y: 0, z: 0 }) {
+  constructor(game, position) {
     this.game = game;
-    this.id = 'egress-router-' + Math.random().toString(36).substr(2, 9);
-    this.position = position;
-    this.name = 'Datacenter Egress Router';
-    this.circuits = [];
-    this.equipment = null;
     this.container = new THREE.Group();
-    this.cabinet = null;
-    this.movable = false; // Egress router cabinet cannot be moved
+    this.position = position;
+    this.circuits = [];
+    this.id = Math.random().toString(36).substr(2, 9);
+    this.equipment = null;
   }
   
   init() {
-    // Create a cabinet for the egress router
+    // Create visual representation of egress router cabinet
     this.createCabinet();
     
     // Create the router equipment
     this.equipment = new NetworkEquipment(this.game, 'ROUTER', {
-      name: 'Core Router',
-      numPorts: 24,
-      portType: 'sfp+',
-      portSpeed: 10
+      name: 'Egress Router',
+      portCount: 24,
+      portType: 'FIBER_MULTIMODE'
     });
-    this.equipment.position = 20; // Position in the cabinet
     this.equipment.init();
     
-    // Add equipment to cabinet
-    this.container.add(this.equipment.container);
-    this.equipment.container.position.set(0, this.equipment.position * 0.25 * (1/42), 0);
+    // Add 2 default circuits
+    this.addCircuit('INTERNET_1G');
     
-    // No longer add a default circuit - player must purchase it
-    // Circuit slots are still available in the egress router
-    
-    // Position the cabinet at the specified location
-    this.container.position.copy(this.position);
+    // Position at the specified location
+    this.container.position.set(this.position.x, this.position.y, this.position.z);
   }
   
   createCabinet() {
-    // Create cabinet mesh similar to a rack but with different style
-    const cabinetGeometry = new THREE.BoxGeometry(2.5, 12, 3.5);
+    // Create a cabinet geometry
+    const cabinetGeometry = new THREE.BoxGeometry(3, 10, 3.5);
     const cabinetMaterial = new THREE.MeshStandardMaterial({
-      color: 0x333333,
+      color: 0x212121, // Dark gray
       roughness: 0.7,
       metalness: 0.3
     });
     
     this.cabinet = new THREE.Mesh(cabinetGeometry, cabinetMaterial);
-    this.cabinet.position.y = 6.25; // Half height off ground + raised floor height
+    this.cabinet.position.y = 5; // Half-height to place it on the ground
     this.cabinet.castShadow = true;
     this.cabinet.receiveShadow = true;
+    
+    // Add userData for interaction
     this.cabinet.userData = {
       type: 'egressCabinet',
       id: this.id,
@@ -283,6 +263,28 @@ export class EgressRouter {
     return false;
   }
   
+  // Calculate total bandwidth from all circuits in Mbps
+  getTotalBandwidth() {
+    return this.circuits.reduce((total, circuit) => {
+      return total + (circuit.speed * 1000); // Convert Gbps to Mbps
+    }, 0);
+  }
+  
+  // Update method for simulation
+  update(delta) {
+    // Update circuit utilization and costs
+    let totalCircuitCost = 0;
+    
+    for (const circuit of this.circuits) {
+      const result = circuit.update(delta);
+      totalCircuitCost += result.cost;
+    }
+    
+    return {
+      circuitCost: totalCircuitCost
+    };
+  }
+  
   connectRackToCircuit(rack, circuitId, rackEquipmentId, rackPortId) {
     // Find the circuit
     const circuit = this.circuits.find(c => c.id === circuitId);
@@ -348,118 +350,60 @@ export class EgressRouter {
       return false;
     }
     
-    // Find the connection to remove
-    const connectionIndex = circuit.connections.findIndex(
-      conn => conn.equipmentId === rackEquipmentId && conn.portId === rackPortId
-    );
-    
-    if (connectionIndex === -1) {
-      console.error('Connection not found');
-      return false;
-    }
-    
-    // Find which port on the egress router is connected to this equipment
+    // Find the cable connection
     let egressPortId = null;
-    for (let i = 0; i < this.equipment.ports.length; i++) {
-      const port = this.equipment.ports[i];
-      if (port.connected && 
-          port.connection && 
-          port.connection.equipmentId === rackEquipmentId) {
+    for (const port of this.equipment.ports) {
+      if (port.connected && port.connectedTo && 
+          port.connectedTo.equipmentId === rackEquipmentId &&
+          port.connectedTo.portId === rackPortId) {
         egressPortId = port.id;
         break;
       }
     }
     
-    if (egressPortId) {
-      // Disconnect the cable
-      this.equipment.disconnectCable(egressPortId);
+    if (!egressPortId) {
+      console.error('No connection found between egress router and rack equipment');
+      return false;
     }
     
-    // Remove the connection from the circuit
+    // Disconnect the cable
+    this.equipment.disconnectCable(egressPortId);
+    
+    // Remove from circuit connections
     circuit.removeConnection(rackEquipmentId, rackPortId);
     
-    // Release the IP address
-    circuit.releaseIp(rackEquipmentId);
+    // Mark equipment as disconnected
     equipment.ipAddress = null;
     equipment.gateway = null;
     equipment.connected = false;
     
-    // Propagate disconnection to servers connected to this switch
+    // Propagate disconnectivity to servers
     this.propagateDisconnectivity(rack, equipment);
     
     return true;
   }
   
   propagateConnectivity(rack, networkEquipment) {
-    // Find all servers connected to this network equipment
-    for (const server of rack.servers) {
-      // Check if the server has a port connected to this network equipment
-      let isConnected = false;
-      
-      if (server.connections) {
-        for (const connection of server.connections) {
-          if (connection.targetEquipmentId === networkEquipment.id) {
-            isConnected = true;
-            break;
-          }
-        }
+    // Check all servers in the rack to see if they're connected to this network equipment
+    rack.servers.forEach(server => {
+      // Simple model: if any of server's cables connect to this network equipment,
+      // the server gets connectivity
+      if (server.cables && server.cables.some(cable => 
+          cable.toEquipmentId === networkEquipment.id)) {
+        server.connected = true;
+        server.ipAddress = `${networkEquipment.ipAddress.split('.').slice(0, 3).join('.')}.${100 + Math.floor(Math.random() * 100)}`;
       }
-      
-      if (isConnected) {
-        // Find a circuit for IP allocation
-        if (this.circuits.length > 0) {
-          const circuit = this.circuits[0]; // Use the first circuit for now
-          const ipAddress = circuit.allocateIp(server.id, `Server ${server.id}`);
-          
-          if (ipAddress) {
-            server.ipAddress = ipAddress;
-            server.gateway = circuit.ipRange.gateway;
-            server.connected = true;
-          }
-        }
-      }
-    }
+    });
   }
   
   propagateDisconnectivity(rack, networkEquipment) {
-    // Find all servers connected to this network equipment
-    for (const server of rack.servers) {
-      // Check if the server has a port connected to this network equipment
-      let isConnected = false;
-      
-      if (server.connections) {
-        for (const connection of server.connections) {
-          if (connection.targetEquipmentId === networkEquipment.id) {
-            isConnected = true;
-            break;
-          }
-        }
-      }
-      
-      if (isConnected) {
-        // Release IP addresses from all circuits
-        for (const circuit of this.circuits) {
-          circuit.releaseIp(server.id);
-        }
-        
-        server.ipAddress = null;
-        server.gateway = null;
+    // Mark all servers connected to this equipment as disconnected
+    rack.servers.forEach(server => {
+      if (server.cables && server.cables.some(cable => 
+          cable.toEquipmentId === networkEquipment.id)) {
         server.connected = false;
+        server.ipAddress = null;
       }
-    }
-  }
-  
-  update(deltaTime) {
-    // Update circuits
-    let totalCircuitCost = 0;
-    
-    for (const circuit of this.circuits) {
-      const result = circuit.update(deltaTime);
-      totalCircuitCost += result.cost;
-    }
-    
-    return {
-      circuitCost: totalCircuitCost
-    };
+    });
   }
 }

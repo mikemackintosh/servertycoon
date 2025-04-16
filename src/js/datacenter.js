@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ServerRack } from './serverRack.js';
 import { EgressRouter } from './networkConnectivity.js';
+import { Finance } from './finance.js';
 
 export class Datacenter {
   constructor(game) {
@@ -15,6 +16,14 @@ export class Datacenter {
     this.powerUsage = 0; // in watts
     this.temperature = 22; // in celsius (starting at room temperature)
     this.circuitUtilization = 0; // percentage
+    
+    // Financial tracking
+    this.customerAgreements = []; // List of active customer contracts
+    this.pendingCustomerRequests = []; // List of customer requests awaiting response
+    this.monthlyRevenue = 0; // Total monthly revenue from all contracts
+    this.monthlyExpenses = 0; // Total monthly expenses (circuits, maintenance, etc.)
+    this.monthlyProfit = 0; // Monthly profit (revenue - expenses)
+    this.projectedAnnualProfit = 0; // Projected annual profit
     
     // Network components
     this.egressRouter = null;
@@ -53,6 +62,10 @@ export class Datacenter {
     
     // Add just one empty rack to start with
     this.addRack(5, 5, true); // Position in center, true = empty rack
+    
+    // Initialize finance system
+    this.finance = new Finance(this);
+    this.finance.init();
   }
   
   // Calculate and update stats

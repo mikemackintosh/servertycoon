@@ -1,4 +1,5 @@
 import { CIRCUIT_TYPES } from './networkConnectivity.js';
+import { FinanceUI } from './financeUI.js';
 
 export class UI {
   constructor(game) {
@@ -21,6 +22,10 @@ export class UI {
     this.createMenuBar(); // Add Windows 2000 style menu bar
     this.createDetailsPanel();
     this.createModalOverlay();
+    
+    // Initialize finance UI
+    this.financeUI = new FinanceUI(this, this.game);
+    
     this.update();
   }
   
@@ -102,6 +107,12 @@ export class UI {
     this.statsContainer.appendChild(this.powerStat);
     this.statsContainer.appendChild(this.tempStat);
     this.statsContainer.appendChild(this.circuitStat);
+    
+    // Add clickable functionality to funds stat to open finances
+    this.fundsStat.style.cursor = 'pointer';
+    this.fundsStat.addEventListener('click', () => {
+      this.financeUI.showFinancesDialog();
+    });
   }
   
   // Create a stat display item
@@ -272,6 +283,7 @@ export class UI {
       { label: 'Buy Circuit', separator: false },
       { label: 'Buy Server', separator: false },
       { label: 'Buy Network Equipment', separator: true },
+      { label: 'Finances', separator: false },
       { label: 'Receiving Dock', separator: false },
       { label: 'Cable Management', separator: false }
     ];
@@ -303,6 +315,8 @@ export class UI {
           this.showServerPurchaseUI();
         } else if (item.label === 'Buy Network Equipment') {
           this.showNetworkEquipmentPurchaseUI();
+        } else if (item.label === 'Finances') {
+          this.financeUI.showFinancesDialog();
         } else if (item.label === 'Receiving Dock') {
           this.showReceivingDockUI();
         } else if (item.label === 'Cable Management') {
@@ -560,6 +574,519 @@ export class UI {
     
     // Close the menu
     this.closeAllMenus();
+  }
+  
+  // Show finances dialog
+  showFinances() {
+    this.closeAllMenus();
+    
+    // Get financial data
+    const finance = this.game.datacenter.finance;
+    if (!finance) {
+      this.showStatusMessage("Finance system not initialized", 3000);
+      return;
+    }
+    
+    const financialSummary = finance.getFinancialSummary();
+    
+    // Create modal content
+    const content = document.createElement('div');
+    content.style.width = '800px';
+    content.style.height = '600px';
+    content.style.padding = '0';
+    content.style.overflow = 'hidden';
+    content.innerHTML = `
+      <div style="display: flex; flex-direction: column; height: 100%;">
+        <!-- Title Bar -->
+        <div style="background-color: #0000a5; color: white; padding: 5px 10px; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
+          <span>Financial Management</span>
+          <button id="finance-close-btn" style="background: #d4d0c8; border: 2px solid; border-color: #FFFFFF #808080 #808080 #FFFFFF; color: black; font-size: 11px;">×</button>
+        </div>
+        
+        <!-- Tabs -->
+        <div style="display: flex; background-color: #d4d0c8; border-bottom: 1px solid #808080;">
+          <div id="finance-tab-summary" class="finance-tab active-tab" style="padding: 5px 15px; cursor: pointer; border: 1px solid; border-color: #FFFFFF #808080 #d4d0c8 #FFFFFF; background-color: #d4d0c8; margin-right: 2px; margin-top: 3px; border-bottom: none;">Summary</div>
+          <div id="finance-tab-agreements" class="finance-tab" style="padding: 5px 15px; cursor: pointer; border: 1px solid; border-color: #808080 #808080 #808080 #808080; background-color: #bbb; margin-right: 2px; margin-top: 3px;">Customer Agreements</div>
+          <div id="finance-tab-requests" class="finance-tab" style="padding: 5px 15px; cursor: pointer; border: 1px solid; border-color: #808080 #808080 #808080 #808080; background-color: #bbb; margin-right: 2px; margin-top: 3px;">Sales & Marketing</div>
+        </div>
+        
+        <!-- Tab Content Container -->
+        <div id="finance-tab-content" style="flex-grow: 1; background-color: #d4d0c8; padding: 10px; overflow: auto;">
+          <!-- Will be filled by tab selection -->
+        </div>
+      </div>
+    `;
+    
+    // Show modal
+    this.openModal(content);
+    
+    // Get tab content container
+    const tabContent = document.getElementById('finance-tab-content');
+    
+    // Helper functions to switch tabs
+    const switchToTab = (tabId) => {
+      // Update tab styling
+      document.querySelectorAll('.finance-tab').forEach(tab => {
+        const isActive = tab.id === `finance-tab-${tabId}`;
+        tab.style.backgroundColor = isActive ? '#d4d0c8' : '#bbb';
+        tab.style.borderColor = isActive ? 
+          '#FFFFFF #808080 #d4d0c8 #FFFFFF' : 
+          '#808080 #808080 #808080 #808080';
+      });
+      
+      // Update content
+      if (tabId === 'summary') {
+        showSummaryTab();
+      } else if (tabId === 'agreements') {
+        showAgreementsTab();
+      } else if (tabId === 'requests') {
+        showRequestsTab();
+      }
+    };
+    
+    // Show summary tab
+    const showSummaryTab = () => {
+      // Format currency
+      const formatCurrency = (amount) => {
+        return '$' + amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      };
+      
+      const breakdown = financialSummary.breakdownByCategory;
+      
+      tabContent.innerHTML = `
+        <div style="padding: 10px 20px;">
+          <h2 style="margin-top: 0; color: #000080;">Financial Summary</h2>
+          
+          <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
+            <div style="flex: 1; padding: 10px; background-color: #eee; border: 1px solid #999; margin-right: 10px;">
+              <h3 style="margin-top: 0; text-align: center; color: #000080;">Current Balance</h3>
+              <p style="font-size: 24px; text-align: center; margin: 10px 0;">${formatCurrency(financialSummary.funds)}</p>
+            </div>
+            <div style="flex: 1; padding: 10px; background-color: #eee; border: 1px solid #999; margin-right: 10px;">
+              <h3 style="margin-top: 0; text-align: center; color: #000080;">Monthly Revenue</h3>
+              <p style="font-size: 24px; text-align: center; margin: 10px 0; color: green;">${formatCurrency(financialSummary.monthlyRevenue)}</p>
+            </div>
+            <div style="flex: 1; padding: 10px; background-color: #eee; border: 1px solid #999;">
+              <h3 style="margin-top: 0; text-align: center; color: #000080;">Monthly Expenses</h3>
+              <p style="font-size: 24px; text-align: center; margin: 10px 0; color: red;">${formatCurrency(financialSummary.monthlyExpenses)}</p>
+            </div>
+          </div>
+          
+          <div style="background-color: #eee; border: 1px solid #999; padding: 15px; margin-bottom: 20px;">
+            <h3 style="margin-top: 0; color: #000080;">Profit Projection</h3>
+            <div style="display: flex; align-items: center; margin-bottom: 10px;">
+              <div style="width: 150px;">Monthly Profit:</div>
+              <div style="font-weight: bold; color: ${financialSummary.monthlyProfit >= 0 ? 'green' : 'red'};">
+                ${formatCurrency(financialSummary.monthlyProfit)}
+              </div>
+            </div>
+            <div style="display: flex; align-items: center;">
+              <div style="width: 150px;">Annual Projection:</div>
+              <div style="font-weight: bold; color: ${financialSummary.annualProfit >= 0 ? 'green' : 'red'};">
+                ${formatCurrency(financialSummary.annualProfit)}
+              </div>
+            </div>
+          </div>
+          
+          <h3 style="color: #000080;">Monthly Expense Breakdown</h3>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <tr style="background-color: #0078D7; color: white;">
+              <th style="padding: 8px; text-align: left; border: 1px solid #999;">Category</th>
+              <th style="padding: 8px; text-align: right; border: 1px solid #999;">Amount</th>
+              <th style="padding: 8px; text-align: right; border: 1px solid #999;">Percentage</th>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border: 1px solid #999;">Circuit Costs</td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #999;">${formatCurrency(breakdown.circuitCosts)}</td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #999;">${(breakdown.circuitCosts / financialSummary.monthlyExpenses * 100).toFixed(1)}%</td>
+            </tr>
+            <tr style="background-color: #f5f5f5;">
+              <td style="padding: 8px; border: 1px solid #999;">Server Maintenance</td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #999;">${formatCurrency(breakdown.serverMaintenance)}</td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #999;">${(breakdown.serverMaintenance / financialSummary.monthlyExpenses * 100).toFixed(1)}%</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border: 1px solid #999;">Network Maintenance</td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #999;">${formatCurrency(breakdown.networkMaintenance)}</td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #999;">${(breakdown.networkMaintenance / financialSummary.monthlyExpenses * 100).toFixed(1)}%</td>
+            </tr>
+            <tr style="background-color: #f5f5f5;">
+              <td style="padding: 8px; border: 1px solid #999;">Power Costs</td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #999;">${formatCurrency(breakdown.powerCosts)}</td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #999;">${(breakdown.powerCosts / financialSummary.monthlyExpenses * 100).toFixed(1)}%</td>
+            </tr>
+            <tr style="font-weight: bold; background-color: #e0e0e0;">
+              <td style="padding: 8px; border: 1px solid #999;">Total</td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #999;">${formatCurrency(financialSummary.monthlyExpenses)}</td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #999;">100.0%</td>
+            </tr>
+          </table>
+          
+          <div style="background-color: #eee; border: 1px solid #999; padding: 15px; margin-bottom: 20px;">
+            <h3 style="margin-top: 0; color: #000080;">Customer & Bandwidth Summary</h3>
+            <div style="display: flex; justify-content: space-between;">
+              <div style="flex: 1;">
+                <div style="margin-bottom: 8px;"><strong>Active Customers:</strong> ${financialSummary.activeCustomers}</div>
+                <div><strong>Pending Requests:</strong> ${financialSummary.pendingRequests}</div>
+              </div>
+              <div style="flex: 1;">
+                <div style="margin-bottom: 8px;"><strong>Bandwidth Utilization:</strong> ${financialSummary.totalBandwidthUtilization} Mbps</div>
+                <div><strong>Circuit Capacity:</strong> ${this.game.datacenter.egressRouter?.getTotalBandwidth() || 0} Mbps</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+    
+    // Show agreements tab
+    const showAgreementsTab = () => {
+      const agreements = finance.customerAgreements;
+      
+      let agreementsHtml = '';
+      if (agreements.length === 0) {
+        agreementsHtml = `<div style="text-align: center; padding: 30px; background-color: #f5f5f5; border: 1px solid #ddd; margin-top: 20px;">No active customer agreements</div>`;
+      } else {
+        agreementsHtml = `
+          <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+            <tr style="background-color: #0078D7; color: white;">
+              <th style="padding: 8px; text-align: left; border: 1px solid #999;">Customer</th>
+              <th style="padding: 8px; text-align: left; border: 1px solid #999;">Type</th>
+              <th style="padding: 8px; text-align: center; border: 1px solid #999;">Specs</th>
+              <th style="padding: 8px; text-align: right; border: 1px solid #999;">Bandwidth</th>
+              <th style="padding: 8px; text-align: right; border: 1px solid #999;">Monthly Revenue</th>
+              <th style="padding: 8px; text-align: center; border: 1px solid #999;">Actions</th>
+            </tr>
+            ${agreements.map((agreement, index) => `
+              <tr style="background-color: ${index % 2 === 0 ? '#f5f5f5' : 'white'};">
+                <td style="padding: 8px; border: 1px solid #999;">${agreement.customerName}</td>
+                <td style="padding: 8px; border: 1px solid #999;">${agreement.type}</td>
+                <td style="padding: 8px; border: 1px solid #999; font-size: 11px;">
+                  CPU: ${agreement.specifications.cpuCores} cores<br>
+                  RAM: ${agreement.specifications.ramGB} GB<br>
+                  Storage: ${agreement.specifications.storageGB} GB
+                </td>
+                <td style="padding: 8px; text-align: right; border: 1px solid #999;">${agreement.bandwidthUtilization} Mbps</td>
+                <td style="padding: 8px; text-align: right; border: 1px solid #999;">$${agreement.monthlyRevenue.toFixed(2)}</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #999;">
+                  <button class="view-agreement-btn" data-id="${agreement.id}" style="font-size: 11px; padding: 2px 5px;">View</button>
+                </td>
+              </tr>
+            `).join('')}
+          </table>
+        `;
+      }
+      
+      tabContent.innerHTML = `
+        <div style="padding: 10px 20px;">
+          <h2 style="margin-top: 0; color: #000080;">Customer Agreements</h2>
+          <p>Active customer contracts and their resource allocations.</p>
+          
+          <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+            <div style="flex: 1; padding: 10px; background-color: #eee; border: 1px solid #999; margin-right: 10px;">
+              <h3 style="margin-top: 0; text-align: center; color: #000080;">Total Agreements</h3>
+              <p style="font-size: 24px; text-align: center; margin: 10px 0;">${agreements.length}</p>
+            </div>
+            <div style="flex: 1; padding: 10px; background-color: #eee; border: 1px solid #999; margin-right: 10px;">
+              <h3 style="margin-top: 0; text-align: center; color: #000080;">Bandwidth Used</h3>
+              <p style="font-size: 24px; text-align: center; margin: 10px 0;">
+                ${financialSummary.totalBandwidthUtilization} / ${this.game.datacenter.egressRouter?.getTotalBandwidth() || 0} Mbps
+              </p>
+            </div>
+            <div style="flex: 1; padding: 10px; background-color: #eee; border: 1px solid #999;">
+              <h3 style="margin-top: 0; text-align: center; color: #000080;">Monthly Revenue</h3>
+              <p style="font-size: 24px; text-align: center; margin: 10px 0; color: green;">$${financialSummary.monthlyRevenue.toFixed(2)}</p>
+            </div>
+          </div>
+          
+          ${agreementsHtml}
+        </div>
+      `;
+      
+      // Add view agreement button handlers
+      document.querySelectorAll('.view-agreement-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const agreementId = btn.dataset.id;
+          const agreement = agreements.find(a => a.id === agreementId);
+          if (agreement) {
+            this.showCustomerAgreementDetails(agreement);
+          }
+        });
+      });
+    };
+    
+    // Show customer requests tab
+    const showRequestsTab = () => {
+      const requests = finance.pendingRequests;
+      
+      let requestsHtml = '';
+      if (requests.length === 0) {
+        requestsHtml = `<div style="text-align: center; padding: 30px; background-color: #f5f5f5; border: 1px solid #ddd; margin-top: 20px;">No pending customer requests</div>`;
+      } else {
+        requestsHtml = `
+          <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+            <tr style="background-color: #0078D7; color: white;">
+              <th style="padding: 8px; text-align: left; border: 1px solid #999;">Customer</th>
+              <th style="padding: 8px; text-align: left; border: 1px solid #999;">Request Type</th>
+              <th style="padding: 8px; text-align: center; border: 1px solid #999;">Size & Traffic</th>
+              <th style="padding: 8px; text-align: right; border: 1px solid #999;">Resource Needs</th>
+              <th style="padding: 8px; text-align: right; border: 1px solid #999;">Monthly Revenue</th>
+              <th style="padding: 8px; text-align: center; border: 1px solid #999;">Actions</th>
+            </tr>
+            ${requests.map((request, index) => `
+              <tr style="background-color: ${index % 2 === 0 ? '#f5f5f5' : 'white'};">
+                <td style="padding: 8px; border: 1px solid #999;">${request.customerName}</td>
+                <td style="padding: 8px; border: 1px solid #999;">${request.type}</td>
+                <td style="padding: 8px; border: 1px solid #999; text-align: center;">
+                  ${request.size}<br>
+                  ${request.trafficPattern} Traffic
+                </td>
+                <td style="padding: 8px; text-align: right; border: 1px solid #999; font-size: 11px;">
+                  CPU: ${request.specifications.cpuCores} cores<br>
+                  RAM: ${request.specifications.ramGB} GB<br>
+                  Storage: ${request.specifications.storageGB} GB<br>
+                  Bandwidth: ${request.specifications.bandwidthMbps} Mbps
+                </td>
+                <td style="padding: 8px; text-align: right; border: 1px solid #999;">$${request.monthlyRevenue.toFixed(2)}</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #999;">
+                  <button class="accept-request-btn" data-id="${request.id}" style="font-size: 11px; padding: 2px 5px; background-color: #4CAF50; color: white; border: 1px solid #2E7D32; margin-right: 5px;">Accept</button>
+                  <button class="decline-request-btn" data-id="${request.id}" style="font-size: 11px; padding: 2px 5px; background-color: #F44336; color: white; border: 1px solid #C62828;">Decline</button>
+                </td>
+              </tr>
+            `).join('')}
+          </table>
+        `;
+      }
+      
+      tabContent.innerHTML = `
+        <div style="padding: 10px 20px;">
+          <h2 style="margin-top: 0; color: #000080;">Sales & Marketing</h2>
+          <p>Manage customer requests and new business opportunities.</p>
+          
+          <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+            <div style="flex: 1; padding: 10px; background-color: #eee; border: 1px solid #999; margin-right: 10px;">
+              <h3 style="margin-top: 0; text-align: center; color: #000080;">Pending Requests</h3>
+              <p style="font-size: 24px; text-align: center; margin: 10px 0;">${requests.length}</p>
+            </div>
+            <div style="flex: 1; padding: 10px; background-color: #eee; border: 1px solid #999; margin-right: 10px;">
+              <h3 style="margin-top: 0; text-align: center; color: #000080;">Available Bandwidth</h3>
+              <p style="font-size: 24px; text-align: center; margin: 10px 0;">
+                ${Math.max(0, (this.game.datacenter.egressRouter?.getTotalBandwidth() || 0) - financialSummary.totalBandwidthUtilization)} Mbps
+              </p>
+            </div>
+            <div style="flex: 1; padding: 10px; background-color: #eee; border: 1px solid #999;">
+              <h3 style="margin-top: 0; text-align: center; color: #000080;">Active Customers</h3>
+              <p style="font-size: 24px; text-align: center; margin: 10px 0;">${financialSummary.activeCustomers}</p>
+            </div>
+          </div>
+          
+          ${requestsHtml}
+          
+          <div style="margin-top: 20px; padding: 15px; background-color: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 4px;">
+            <h3 style="margin-top: 0; color: #2E7D32;">Generate New Business</h3>
+            <p>Invest in marketing to generate additional customer leads.</p>
+            <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+              <button id="generate-lead-btn" style="padding: 5px 15px; background-color: #4CAF50; color: white; border: 1px solid #2E7D32;">Generate Lead ($500)</button>
+              <button id="marketing-campaign-btn" style="padding: 5px 15px; background-color: #2196F3; color: white; border: 1px solid #1565C0;">Run Marketing Campaign ($2,000)</button>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // Add accept/decline request button handlers
+      document.querySelectorAll('.accept-request-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const requestId = btn.dataset.id;
+          this.acceptCustomerRequest(requestId);
+        });
+      });
+      
+      document.querySelectorAll('.decline-request-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const requestId = btn.dataset.id;
+          if (confirm("Are you sure you want to decline this request? The customer will look elsewhere.")) {
+            finance.declineCustomerRequest(requestId);
+            this.showFinances(); // Refresh the tab
+          }
+        });
+      });
+      
+      // Add marketing button handlers
+      document.getElementById('generate-lead-btn')?.addEventListener('click', () => {
+        if (this.game.datacenter.funds < 500) {
+          this.showStatusMessage("Not enough funds for lead generation", 3000);
+          return;
+        }
+        
+        this.game.datacenter.updateFunds(-500);
+        finance.generateCustomerRequest();
+        this.showStatusMessage("New lead generated", 3000);
+        this.showFinances(); // Refresh the tab
+      });
+      
+      document.getElementById('marketing-campaign-btn')?.addEventListener('click', () => {
+        if (this.game.datacenter.funds < 2000) {
+          this.showStatusMessage("Not enough funds for marketing campaign", 3000);
+          return;
+        }
+        
+        this.game.datacenter.updateFunds(-2000);
+        
+        // Generate multiple leads for a marketing campaign
+        for (let i = 0; i < 5; i++) {
+          finance.generateCustomerRequest();
+        }
+        
+        this.showStatusMessage("Marketing campaign launched with 5 new leads", 3000);
+        this.showFinances(); // Refresh the tab
+      });
+    };
+    
+    // Show the summary tab by default
+    showSummaryTab();
+    
+    // Add tab switching handlers
+    document.getElementById('finance-tab-summary').addEventListener('click', () => switchToTab('summary'));
+    document.getElementById('finance-tab-agreements').addEventListener('click', () => switchToTab('agreements'));
+    document.getElementById('finance-tab-requests').addEventListener('click', () => switchToTab('requests'));
+    
+    // Close button handler
+    document.getElementById('finance-close-btn').addEventListener('click', () => {
+      this.closeModal();
+    });
+  }
+  
+  // Accept a customer request and assign resources
+  acceptCustomerRequest(requestId) {
+    const finance = this.game.datacenter.finance;
+    const request = finance.pendingRequests.find(req => req.id === requestId);
+    
+    if (!request) {
+      this.showStatusMessage("Customer request not found", 3000);
+      return;
+    }
+    
+    // Check if we have enough bandwidth
+    const currentUtilization = finance.calculateTotalBandwidthUtilization();
+    const totalAvailableBandwidth = this.game.datacenter.egressRouter?.getTotalBandwidth() || 0;
+    
+    if (currentUtilization + request.specifications.bandwidthMbps > totalAvailableBandwidth) {
+      this.showStatusMessage("Not enough bandwidth capacity. Upgrade circuits first.", 3000);
+      return;
+    }
+    
+    // Create content for server assignment modal
+    const content = document.createElement('div');
+    content.style.width = '600px';
+    content.innerHTML = `
+      <div style="padding: 15px;">
+        <h2 style="margin-top: 0; color: #000080;">Accept Customer Request</h2>
+        <p>Assign servers to fulfill <strong>${request.customerName}'s</strong> request for a <strong>${request.size} ${request.type}</strong>.</p>
+        
+        <div style="background-color: #eee; border: 1px solid #999; padding: 10px; margin-bottom: 15px;">
+          <h3 style="margin-top: 0; margin-bottom: 10px; color: #000080;">Resource Requirements</h3>
+          <div style="display: flex; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 120px; margin-bottom: 5px;">
+              <strong>CPU:</strong> ${request.specifications.cpuCores} cores
+            </div>
+            <div style="flex: 1; min-width: 120px; margin-bottom: 5px;">
+              <strong>RAM:</strong> ${request.specifications.ramGB} GB
+            </div>
+            <div style="flex: 1; min-width: 120px; margin-bottom: 5px;">
+              <strong>Storage:</strong> ${request.specifications.storageGB} GB
+            </div>
+            <div style="flex: 1; min-width: 120px; margin-bottom: 5px;">
+              <strong>Bandwidth:</strong> ${request.specifications.bandwidthMbps} Mbps
+            </div>
+            <div style="flex: 1; min-width: 120px; margin-bottom: 5px;">
+              <strong>Monthly Revenue:</strong> $${request.monthlyRevenue.toFixed(2)}
+            </div>
+          </div>
+        </div>
+        
+        <p>An estimated <strong>${request.specifications.serversRequired} server(s)</strong> will be needed for this request.</p>
+        
+        <p>By accepting this request, we'll automatically allocate the necessary resources from our available servers.</p>
+        
+        <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+          <button id="cancel-request-btn" style="margin-right: 10px; padding: 5px 15px;">Cancel</button>
+          <button id="confirm-accept-btn" style="padding: 5px 15px; background-color: #4CAF50; color: white; border: 1px solid #2E7D32;">Accept Request</button>
+        </div>
+      </div>
+    `;
+    
+    // Show the modal
+    this.openModal(content);
+    
+    // Add button handlers
+    document.getElementById('cancel-request-btn').addEventListener('click', () => {
+      this.closeModal();
+    });
+    
+    document.getElementById('confirm-accept-btn').addEventListener('click', () => {
+      // Accept the request and add to customer agreements
+      const agreement = finance.acceptCustomerRequest(requestId);
+      
+      if (agreement) {
+        this.showStatusMessage(`Accepted request from ${request.customerName}`, 3000);
+      } else {
+        this.showStatusMessage("Failed to accept request", 3000);
+      }
+      
+      this.closeModal();
+      this.showFinances(); // Refresh finances display
+    });
+  }
+  
+  // Show customer agreement details
+  showCustomerAgreementDetails(agreement) {
+    const content = document.createElement('div');
+    content.style.width = '600px';
+    content.innerHTML = `
+      <div style="padding: 15px;">
+        <h2 style="margin-top: 0; color: #000080;">Customer Agreement Details</h2>
+        
+        <div style="background-color: #eee; border: 1px solid #999; padding: 15px; margin-bottom: 15px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h3 style="margin: 0; color: #000080;">${agreement.customerName}</h3>
+            <span style="background-color: #4CAF50; color: white; padding: 3px 8px; border-radius: 3px;">Active</span>
+          </div>
+          <p style="margin-bottom: 5px;"><strong>Service Type:</strong> ${agreement.type}</p>
+          <p style="margin-bottom: 5px;"><strong>Monthly Revenue:</strong> $${agreement.monthlyRevenue.toFixed(2)}</p>
+          <p style="margin-bottom: 5px;"><strong>Start Date:</strong> ${new Date(agreement.startDate).toLocaleDateString()}</p>
+        </div>
+        
+        <h3 style="color: #000080;">Resource Allocation</h3>
+        <div style="background-color: #f9f9f9; border: 1px solid #ddd; padding: 10px; margin-bottom: 15px;">
+          <div style="display: flex; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+              <strong>CPU Cores:</strong> ${agreement.specifications.cpuCores}
+            </div>
+            <div style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+              <strong>RAM:</strong> ${agreement.specifications.ramGB} GB
+            </div>
+            <div style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+              <strong>Storage:</strong> ${agreement.specifications.storageGB} GB
+            </div>
+            <div style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+              <strong>Bandwidth:</strong> ${agreement.bandwidthUtilization} Mbps
+            </div>
+          </div>
+        </div>
+        
+        <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+          <button id="close-agreement-details-btn" style="padding: 5px 15px;">Close</button>
+        </div>
+      </div>
+    `;
+    
+    // Show the modal
+    this.openModal(content);
+    
+    // Add close button handler
+    document.getElementById('close-agreement-details-btn').addEventListener('click', () => {
+      this.closeModal();
+    });
   }
   
   // Show a temporary status message
@@ -1882,14 +2409,14 @@ export class UI {
               <div class="circuit-item" style="border: 1px solid #999; padding: 10px; margin-bottom: 10px; border-radius: 3px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <h4 style="margin: 0;">${circuit.name}</h4>
-                  <span>${circuit.status.toUpperCase()}</span>
+                  <span>${circuit.utilization * 100 < 50 ? 'NORMAL' : circuit.utilization * 100 < 80 ? 'BUSY' : 'HIGH LOAD'}</span>
                 </div>
                 <p><strong>Type:</strong> ${circuit.type}</p>
                 <p><strong>Speed:</strong> ${circuit.speed} Gbps</p>
                 <p><strong>Cost:</strong> $${circuit.cost}/month</p>
-                <p><strong>Utilization:</strong> ${Math.round(circuit.utilization)}%</p>
+                <p><strong>Utilization:</strong> ${Math.round(circuit.utilization * 100)}%</p>
                 <p><strong>Connections:</strong> ${circuit.connections.length} / ${circuit.specs.maxConnections}</p>
-                <p><strong>IP Range:</strong> ${circuit.ipRange.network}</p>
+                <p><strong>IP Range:</strong> ${circuit.ipRange.base}.0/24</p>
                 <div style="margin-top: 10px;">
                   <button class="connect-rack-btn" data-circuit-id="${circuit.id}">Connect Rack</button>
                   <button class="remove-circuit-btn" data-circuit-id="${circuit.id}">Remove Circuit</button>
@@ -1967,9 +2494,9 @@ export class UI {
         <p><strong>Type:</strong> ${circuit.type}</p>
         <p><strong>Speed:</strong> ${circuit.speed} Gbps</p>
         <p><strong>Cost:</strong> $${circuit.cost}/month</p>
-        <p><strong>Status:</strong> ${circuit.status.toUpperCase()}</p>
-        <p><strong>Utilization:</strong> ${Math.round(circuit.utilization)}%</p>
-        <p><strong>IP Range:</strong> ${circuit.ipRange.network}</p>
+        <p><strong>Status:</strong> ${circuit.utilization * 100 < 50 ? 'NORMAL' : circuit.utilization * 100 < 80 ? 'BUSY' : 'HIGH LOAD'}</p>
+        <p><strong>Utilization:</strong> ${Math.round(circuit.utilization * 100)}%</p>
+        <p><strong>IP Range:</strong> ${circuit.ipRange.base}.0/24</p>
       </div>
     `;
     
@@ -2003,7 +2530,7 @@ export class UI {
                     <td style="padding: 8px; border-bottom: 1px solid #eee;">${equipment ? equipment.name : 'Unknown Device'}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #eee;">Port ${conn.portId}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #eee;">${conn.ipAddress || 'None'}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${conn.status}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${conn.connected ? 'CONNECTED' : 'DISCONNECTED'}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">
                       <button class="disconnect-btn" data-equipment-id="${conn.equipmentId}" data-port-id="${conn.portId}">Disconnect</button>
                     </td>
@@ -2019,13 +2546,13 @@ export class UI {
     const ipAddressesList = `
       <div style="margin-bottom: 20px;">
         <h3>IP Addresses</h3>
-        <p><strong>Network:</strong> ${circuit.ipRange.network}</p>
+        <p><strong>Network:</strong> ${circuit.ipRange.base}.0/24</p>
         <p><strong>Gateway:</strong> ${circuit.ipRange.gateway}</p>
-        <p><strong>Usable Range:</strong> ${circuit.ipRange.usable}</p>
-        <p><strong>Broadcast:</strong> ${circuit.ipRange.broadcast}</p>
+        <p><strong>Usable Range:</strong> ${circuit.ipRange.base}.1 - ${circuit.ipRange.base}.254</p>
+        <p><strong>Broadcast:</strong> ${circuit.ipRange.base}.255</p>
         
         <h4>Allocated IP Addresses</h4>
-        ${Object.keys(circuit.ipRange.allocatedIps).length === 0 
+        ${Object.keys(circuit.ipRange.assignedIps || {}).length === 0 
           ? '<p>No IP addresses allocated yet.</p>' 
           : `
             <table style="width: 100%; border-collapse: collapse;">
@@ -2037,13 +2564,13 @@ export class UI {
                 </tr>
               </thead>
               <tbody>
-                ${Object.keys(circuit.ipRange.allocatedIps).map(deviceId => {
-                  const ip = circuit.ipRange.allocatedIps[deviceId];
+                ${Object.entries(circuit.ipRange.assignedIps || {}).map(([deviceId, ip]) => {
+                  const equipment = this.game.findEquipmentById(deviceId);
                   return `
                     <tr>
-                      <td style="padding: 8px; border-bottom: 1px solid #eee;">${ip.name || deviceId}</td>
-                      <td style="padding: 8px; border-bottom: 1px solid #eee;">${ip.ip}</td>
-                      <td style="padding: 8px; border-bottom: 1px solid #eee;">${new Date(ip.allocated).toLocaleString()}</td>
+                      <td style="padding: 8px; border-bottom: 1px solid #eee;">${equipment ? equipment.name : deviceId}</td>
+                      <td style="padding: 8px; border-bottom: 1px solid #eee;">${ip}</td>
+                      <td style="padding: 8px; border-bottom: 1px solid #eee;">Active</td>
                     </tr>
                   `;
                 }).join('')}

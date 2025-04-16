@@ -96,6 +96,12 @@ export const PORT_TYPES = {
     speeds: [0.01], // Serial
     connector: 'RJ45/DB9',
     color: 0x607D8B // Blue gray
+  },
+  FIBER_MULTIMODE: {
+    name: 'Multimode Fiber',
+    speeds: [1, 10, 40, 100], // Gbps
+    connector: 'LC',
+    color: 0xF44336 // Red
   }
 };
 

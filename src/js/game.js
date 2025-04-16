@@ -1054,6 +1054,11 @@ export class Game {
         expenses += result.circuitCost || 0;
       }
       
+      // Update finance model to generate new customer requests
+      if (this.datacenter.finance) {
+        this.datacenter.finance.update(delta);
+      }
+      
       // Accumulate revenue and expenses
       this.accumulatedRevenue += revenue * delta * 100;
       this.accumulatedExpenses += expenses;
