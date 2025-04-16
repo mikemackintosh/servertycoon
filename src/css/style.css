@@ -7,10 +7,354 @@
 body {
   overflow: hidden;
   background-color: #87CEEB; /* Light blue */
+  font-family: 'Arial', sans-serif;
 }
 
 #game-container {
   position: absolute;
   width: 100%;
   height: 100%;
+}
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.modal-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.modal-content {
+  background-color: #333;
+  color: white;
+  border-radius: 10px;
+  padding: 20px;
+  width: 80%;
+  max-width: 900px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+}
+
+.modal-close {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  font-size: 24px;
+  cursor: pointer;
+  color: #aaa;
+}
+
+.modal-close:hover {
+  color: white;
+}
+
+/* Rack view styles */
+.rack-view {
+  display: flex;
+  flex-direction: column;
+  height: 70vh;
+}
+
+.rack-container {
+  display: flex;
+  flex: 1;
+  margin: 20px 0;
+}
+
+.rack-units {
+  display: flex;
+  flex-direction: column-reverse;
+  background-color: #222;
+  width: 40px;
+  padding: 5px;
+  border-right: 1px solid #444;
+}
+
+.rack-unit-number {
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #aaa;
+  border-bottom: 1px dotted #444;
+}
+
+.rack-main {
+  flex: 1;
+  background-color: #222;
+  display: flex;
+  flex-direction: column-reverse;
+  position: relative;
+}
+
+.server-slot {
+  height: 20px;
+  border-bottom: 1px dotted #444;
+  background-color: #333;
+}
+
+.server-slot:hover {
+  background-color: #444;
+}
+
+.rack-server {
+  position: absolute;
+  width: 100%;
+  background-color: #484848;
+  border: 1px solid #666;
+  border-radius: 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  z-index: 10;
+  transition: box-shadow 0.2s ease, transform 0.1s ease;
+}
+
+.rack-server.dragging {
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.7);
+  opacity: 0.8;
+  z-index: 100;
+  cursor: grabbing;
+}
+
+.rack-server.draggable {
+  cursor: grab;
+}
+
+.server-slot.drop-target {
+  background-color: rgba(76, 175, 80, 0.3);
+}
+
+.server-led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin: 0 5px;
+}
+
+.server-led.power {
+  background-color: #4CAF50;
+}
+
+.server-led.activity {
+  background-color: #FFC107;
+}
+
+@keyframes blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.3; }
+  100% { opacity: 1; }
+}
+
+.server-name {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.server-toolbar {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+.server-toolbar button {
+  padding: 8px 15px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.server-toolbar button:hover {
+  background-color: #388E3C;
+}
+
+.server-details {
+  background-color: #333;
+  padding: 15px;
+  border-radius: 5px;
+  margin-top: 20px;
+  display: none;
+}
+
+.server-details.active {
+  display: block;
+}
+
+/* Network equipment styles */
+.network-equipment {
+  background-color: #333333;
+}
+
+.port-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 10px;
+  margin: 3px 0;
+  background-color: #444;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.port-up {
+  border-left: 4px solid #4CAF50;
+}
+
+.port-down {
+  border-left: 4px solid #9E9E9E;
+}
+
+.ports-container {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.ports-column {
+  flex: 1;
+}
+
+.vlan-item {
+  padding: 5px 10px;
+  margin: 3px 0;
+  background-color: #444;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.network-item {
+  margin: 5px 0;
+  padding: 10px;
+  background-color: #444;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.network-item:hover {
+  background-color: #555;
+}
+
+.network-item-header {
+  display: flex;
+  justify-content: space-between;
+}
+
+.form-group {
+  margin: 10px 0;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.form-group select, .form-group input {
+  width: 100%;
+  padding: 5px;
+  background-color: #333;
+  color: white;
+  border: 1px solid #666;
+  border-radius: 3px;
+}
+
+.form-group button {
+  margin-right: 5px;
+  margin-bottom: 5px;
+}
+
+/* Cable management styles */
+.cable-management-container {
+  margin-top: 20px;
+}
+
+.cable-instructions {
+  background-color: #333;
+  padding: 10px;
+  border-radius: 5px;
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+.cable-instructions kbd {
+  background-color: #444;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+.connections-list {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 10px;
+}
+
+.connection-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 10px;
+  margin: 3px 0;
+  background-color: #444;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.connection-item button {
+  padding: 2px 5px;
+  font-size: 10px;
+  background-color: #F44336;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.cable-type-copper {
+  border-left: 4px solid #E0A30B;
+}
+
+.cable-type-fiber {
+  border-left: 4px solid #F44336;
+}
+
+.port-assignment-item {
+  display: flex;
+  align-items: center;
+  padding: 5px 10px;
+  margin: 3px 0;
+  background-color: #444;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.port-assignment-item label {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  cursor: pointer;
+}
+
+.port-assignment-item input[type="checkbox"] {
+  margin-right: 10px;
 }

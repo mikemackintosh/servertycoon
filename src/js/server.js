@@ -25,6 +25,12 @@ export class Server {
     this.utilization = 0; // 0-100%
     this.status = 'idle'; // idle, running, error
     this.revenue = 10; // $ per hour
+    
+    // Network connectivity properties
+    this.ipAddress = null;
+    this.gateway = null;
+    this.connected = false;
+    this.connections = []; // Stores connection details to network equipment
   }
 
   init() {
