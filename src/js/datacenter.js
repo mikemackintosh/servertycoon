@@ -99,12 +99,35 @@ export class Datacenter {
     // Calculate circuit utilization
     this.circuitUtilization = 0;
     if (this.egressRouter && this.egressRouter.circuits.length > 0) {
-      // Average utilization across all circuits
-      let totalUtilization = 0;
-      for (const circuit of this.egressRouter.circuits) {
-        totalUtilization += circuit.utilization || 0;
+      // Calculate total bandwidth from all connected servers
+      let totalBandwidthUsage = 0;
+      for (const rack of this.racks) {
+        for (const server of rack.servers) {
+          // Only count servers that are properly connected
+          if (server.connected && server.ipAddress) {
+            totalBandwidthUsage += server.bandwidthUsage || 0;
+          }
+        }
       }
-      this.circuitUtilization = totalUtilization / this.egressRouter.circuits.length;
+      
+      // Calculate total available bandwidth across all circuits
+      const totalAvailableBandwidth = this.egressRouter.getTotalBandwidth();
+      
+      // Calculate utilization as a percentage
+      if (totalAvailableBandwidth > 0) {
+        this.circuitUtilization = (totalBandwidthUsage / totalAvailableBandwidth) * 100;
+      }
+      
+      // Update circuit utilization in each circuit based on usage distribution
+      if (this.egressRouter.circuits.length > 0 && totalBandwidthUsage > 0) {
+        // Distribute bandwidth evenly across circuits (simple model)
+        const bandwidthPerCircuit = totalBandwidthUsage / this.egressRouter.circuits.length;
+        
+        for (const circuit of this.egressRouter.circuits) {
+          const circuitCapacity = circuit.speed * 1000; // Convert Gbps to Mbps
+          circuit.utilization = Math.min(1, bandwidthPerCircuit / circuitCapacity);
+        }
+      }
     }
   }
   

@@ -32,7 +32,6 @@ export class Server {
     this.ipAddress = null;
     this.connected = false;
     this.gateway = null;
-    this.connected = false;
     this.connections = []; // Stores connection details to network equipment
     
     // Hosting properties
@@ -41,6 +40,58 @@ export class Server {
     this.ramUsage = 0; // Percentage of RAM used by hosted websites
     this.storageUsage = 0; // Percentage of storage used by hosted websites
     this.bandwidthUsage = 0; // Mbps of bandwidth used by hosted websites
+  }
+  
+  // Update method that will be called in the game loop
+  update(delta) {
+    if (!this.powered) return 0;
+    
+    // If server is running websites, update utilization with some minor variance
+    if (this.hostedWebsites.length > 0) {
+      // Add some small random fluctuation to utilization (max +/- 10%)
+      const fluctuation = (Math.random() * 10 - 5) * delta;
+      this.utilization = Math.min(100, Math.max(this.cpuUsage, this.utilization + fluctuation));
+      
+      // Update bandwidth usage based on hosted websites with some fluctuation
+      // This simulates real-world traffic patterns
+      let simulatedBandwidthUsage = 0;
+      
+      for (const website of this.hostedWebsites) {
+        const baseBandwidth = website.specifications.bandwidthMbps;
+        // Add some traffic variation - more variation for 'bursty' websites
+        const trafficPattern = website.specifications.trafficPattern || '';
+        
+        let variationFactor = 0.2; // Default 20% variation
+        if (trafficPattern.toLowerCase().includes('bursty')) {
+          variationFactor = 0.5; // 50% variation for bursty traffic
+        } else if (trafficPattern.toLowerCase().includes('high')) {
+          variationFactor = 0.3; // 30% variation for high traffic
+        }
+        
+        // Calculate bandwidth with variation and time-based patterns
+        const variation = baseBandwidth * variationFactor;
+        const time = Date.now() * 0.001; // Current time in seconds
+        const timeBasedPattern = Math.sin(time * 0.1) * 0.5 + 0.5; // 0-1 value that changes over time
+        
+        const currentBandwidth = baseBandwidth + (variation * timeBasedPattern);
+        simulatedBandwidthUsage += currentBandwidth;
+        
+        // Update the website's current bandwidth usage
+        website.bandwidthUsage = currentBandwidth;
+      }
+      
+      // Update server's total bandwidth usage
+      this.bandwidthUsage = simulatedBandwidthUsage;
+      
+      // Calculate revenue based on uptime and utilization
+      const hourlyRevenue = (this.connected) ? this.revenue : this.revenue * 0.1;
+      return hourlyRevenue * delta / (60 * 60); // Convert hourly revenue to per-second rate
+    } else {
+      // No websites hosted, so no bandwidth usage
+      this.bandwidthUsage = 0;
+    }
+    
+    return 0; // No revenue if no websites hosted
   }
 
   init() {

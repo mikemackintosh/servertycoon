@@ -118,12 +118,19 @@ export class Circuit {
   }
   
   update(delta) {
-    // Simulate utilization changes
-    if (delta) {
-      // Add some random variance to utilization (+/- 0.5% per second)
-      this.utilization = Math.max(0, Math.min(1, 
-        this.utilization + (Math.random() * 0.01 - 0.005) * delta
-      ));
+    // This method is primarily used for cost calculation now
+    // The actual utilization is managed by datacenter.updateStats()
+    
+    // Keep a small amount of random variance to make things look alive
+    // but main utilization comes from actual server traffic
+    if (!this.connections || this.connections.length === 0) {
+      // If no connections, gradually reduce utilization to 0
+      this.utilization = Math.max(0, this.utilization - 0.01 * delta);
+    } else {
+      // Small random fluctuations even when utilization is actively managed
+      // This just adds some realism to the display
+      const fluctuation = (Math.random() * 0.01 - 0.005) * delta;
+      this.utilization = Math.max(0, Math.min(1, this.utilization + fluctuation));
     }
     
     return {
