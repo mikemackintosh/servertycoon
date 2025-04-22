@@ -239,8 +239,9 @@ export class EgressRouter {
     });
     
     const tile = new THREE.Mesh(tileGeometry, tileMaterial);
-    // Position on the closest floor tile square
-    tile.position.set(0, 0.06, 3.5); 
+    // Position the tile on the server room floor
+    // Adjust x-position to be closer to the server room area
+    tile.position.set(0, 0.15, 3.5); 
     tile.castShadow = false;
     tile.receiveShadow = true;
     

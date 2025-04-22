@@ -23,6 +23,9 @@ export class UI {
     this.createDetailsPanel();
     this.createModalOverlay();
     
+    // Create cable management panel (hidden by default)
+    this.createCableManagementPanel();
+    
     // Initialize finance UI
     this.financeUI = new FinanceUI(this, this.game);
     
@@ -98,11 +101,13 @@ export class UI {
     this.menuBar.appendChild(this.statsContainer);
     
     // Add stats items
+    this.dateStat = this.createStatItem('Jan 1, 2025');
     this.fundsStat = this.createStatItem('Funds: $1,000');
     this.powerStat = this.createStatItem('Power: 0W');
     this.tempStat = this.createStatItem('Temp: 22°C');
     this.circuitStat = this.createStatItem('Circuit: 0%');
     
+    this.statsContainer.appendChild(this.dateStat);
     this.statsContainer.appendChild(this.fundsStat);
     this.statsContainer.appendChild(this.powerStat);
     this.statsContainer.appendChild(this.tempStat);
@@ -128,10 +133,132 @@ export class UI {
     return item;
   }
   
+  // Update the date display in the menu bar
+  updateDateDisplay(date) {
+    if (!this.dateStat) return;
+    
+    // Format date as "MMM D, YYYY"
+    const options = { month: 'short', day: 'numeric', year: 'numeric' };
+    const formattedDate = date.toLocaleDateString('en-US', options);
+    this.dateStat.textContent = formattedDate;
+    
+    // Make date clickable to show time controls
+    if (!this.dateStat._hasListener) {
+      this.dateStat.style.cursor = 'pointer';
+      this.dateStat.addEventListener('click', () => {
+        this.showTimeControlsDialog();
+      });
+      this.dateStat._hasListener = true;
+    }
+  }
+  
+  // Show time controls dialog
+  showTimeControlsDialog() {
+    const content = document.createElement('div');
+    content.style.width = '400px';
+    content.style.padding = '15px';
+    
+    const gameTime = this.game.gameTime;
+    const isPaused = gameTime.isPaused;
+    const currentTimeScale = gameTime.timeScale;
+    
+    // Format current date
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    const formattedDate = gameTime.currentDate.toLocaleDateString('en-US', options);
+    
+    content.innerHTML = `
+      <h2 style="margin-top: 0; color: #000080;">Game Time Controls</h2>
+      <p>Current Date: <strong>${formattedDate}</strong></p>
+      
+      <div style="background-color: #f0f0f0; padding: 10px; border: 1px solid #ccc; margin-bottom: 15px;">
+        <h3 style="margin-top: 0; margin-bottom: 10px;">Game Speed</h3>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+          <button id="speed-pause" class="time-btn ${isPaused ? 'active' : ''}" 
+            style="flex: 1; margin: 0 5px; padding: 5px; background-color: ${isPaused ? '#4CAF50' : '#e0e0e0'}; 
+            color: ${isPaused ? 'white' : 'black'}; border: 1px solid #999;">
+            Pause
+          </button>
+          <button id="speed-1x" class="time-btn ${!isPaused && currentTimeScale === 720 ? 'active' : ''}" 
+            style="flex: 1; margin: 0 5px; padding: 5px; background-color: ${!isPaused && currentTimeScale === 720 ? '#4CAF50' : '#e0e0e0'}; 
+            color: ${!isPaused && currentTimeScale === 720 ? 'white' : 'black'}; border: 1px solid #999;">
+            Normal (1x)
+          </button>
+          <button id="speed-2x" class="time-btn ${!isPaused && currentTimeScale === 1440 ? 'active' : ''}" 
+            style="flex: 1; margin: 0 5px; padding: 5px; background-color: ${!isPaused && currentTimeScale === 1440 ? '#4CAF50' : '#e0e0e0'}; 
+            color: ${!isPaused && currentTimeScale === 1440 ? 'white' : 'black'}; border: 1px solid #999;">
+            Fast (2x)
+          </button>
+          <button id="speed-4x" class="time-btn ${!isPaused && currentTimeScale === 2880 ? 'active' : ''}" 
+            style="flex: 1; margin: 0 5px; padding: 5px; background-color: ${!isPaused && currentTimeScale === 2880 ? '#4CAF50' : '#e0e0e0'}; 
+            color: ${!isPaused && currentTimeScale === 2880 ? 'white' : 'black'}; border: 1px solid #999;">
+            Very Fast (4x)
+          </button>
+        </div>
+      </div>
+      
+      <div style="margin-top: 15px; font-size: 11px; color: #666;">
+        <p>Game time accelerates at different rates:</p>
+        <ul>
+          <li>Normal: 1 real second = 12 game hours</li>
+          <li>Fast: 1 real second = 24 game hours (1 day)</li>
+          <li>Very Fast: 1 real second = 48 game hours (2 days)</li>
+        </ul>
+        <p>Financial statements are generated at the end of each month.</p>
+      </div>
+      
+      <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+        <button id="close-time-controls-btn" style="padding: 5px 15px;">Close</button>
+      </div>
+    `;
+    
+    this.openModal(content);
+    
+    // Add button event listeners
+    document.getElementById('speed-pause').addEventListener('click', () => {
+      if (!this.game.gameTime.isPaused) {
+        this.game.togglePauseTime();
+      }
+      this.showTimeControlsDialog(); // Refresh the dialog
+    });
+    
+    document.getElementById('speed-1x').addEventListener('click', () => {
+      if (this.game.gameTime.isPaused) {
+        this.game.togglePauseTime();
+      }
+      this.game.setTimeScale(720); // 12 hours per second
+      this.showTimeControlsDialog(); // Refresh the dialog
+    });
+    
+    document.getElementById('speed-2x').addEventListener('click', () => {
+      if (this.game.gameTime.isPaused) {
+        this.game.togglePauseTime();
+      }
+      this.game.setTimeScale(1440); // 24 hours per second
+      this.showTimeControlsDialog(); // Refresh the dialog
+    });
+    
+    document.getElementById('speed-4x').addEventListener('click', () => {
+      if (this.game.gameTime.isPaused) {
+        this.game.togglePauseTime();
+      }
+      this.game.setTimeScale(2880); // 48 hours per second
+      this.showTimeControlsDialog(); // Refresh the dialog
+    });
+    
+    document.getElementById('close-time-controls-btn').addEventListener('click', () => {
+      this.closeModal();
+    });
+  }
+  
   // Update menu bar stats
   updateMenuStats() {
     if (this.game && this.game.datacenter) {
       const dc = this.game.datacenter;
+      
+      // Update date display if game time exists
+      if (this.game.gameTime && this.game.gameTime.currentDate) {
+        this.updateDateDisplay(this.game.gameTime.currentDate);
+      }
       
       // Update funds display
       this.fundsStat.textContent = `Funds: $${dc.funds.toLocaleString()}`;
@@ -149,6 +276,253 @@ export class UI {
       
       // Update circuit utilization
       this.circuitStat.textContent = `Circuit: ${Math.round(dc.circuitUtilization)}%`;
+    }
+  }
+  
+  // Create the cable management panel
+  createCableManagementPanel() {
+    // Create cable panel container
+    this.cablePanel = document.createElement('div');
+    this.cablePanel.className = 'win2k-panel cable-panel';
+    this.cablePanel.style.position = 'absolute';
+    this.cablePanel.style.top = '50px';
+    this.cablePanel.style.left = '10px';
+    this.cablePanel.style.width = '250px';
+    this.cablePanel.style.minHeight = '300px';
+    this.cablePanel.style.backgroundColor = '#d4d0c8';
+    this.cablePanel.style.border = '2px solid #808080';
+    this.cablePanel.style.borderTop = '2px solid #ffffff';
+    this.cablePanel.style.borderLeft = '2px solid #ffffff';
+    this.cablePanel.style.boxShadow = '2px 2px 5px rgba(0, 0, 0, 0.3)';
+    this.cablePanel.style.zIndex = '100';
+    this.cablePanel.style.display = 'none'; // Hidden by default
+    
+    // Create title bar (Windows 2000 style)
+    const titleBar = document.createElement('div');
+    titleBar.className = 'win2k-title-bar';
+    titleBar.style.backgroundColor = '#0000a5';
+    titleBar.style.color = '#ffffff';
+    titleBar.style.padding = '2px 5px';
+    titleBar.style.fontWeight = 'bold';
+    titleBar.style.display = 'flex';
+    titleBar.style.justifyContent = 'space-between';
+    titleBar.style.alignItems = 'center';
+    titleBar.style.cursor = 'move';
+    
+    // Add title text
+    const titleText = document.createElement('div');
+    titleText.textContent = 'Cable Management';
+    titleBar.appendChild(titleText);
+    
+    // Add close button
+    const closeButton = document.createElement('button');
+    closeButton.innerHTML = '✕';
+    closeButton.style.backgroundColor = '#d4d0c8';
+    closeButton.style.border = '1px solid #808080';
+    closeButton.style.width = '16px';
+    closeButton.style.height = '16px';
+    closeButton.style.padding = '0';
+    closeButton.style.margin = '0';
+    closeButton.style.display = 'flex';
+    closeButton.style.justifyContent = 'center';
+    closeButton.style.alignItems = 'center';
+    closeButton.style.fontSize = '10px';
+    closeButton.style.color = '#000000';
+    closeButton.style.cursor = 'pointer';
+    
+    closeButton.addEventListener('click', () => {
+      this.game.toggleCableMode(false);
+    });
+    
+    titleBar.appendChild(closeButton);
+    
+    // Make panel draggable
+    this.makePanelDraggable(this.cablePanel, titleBar);
+    
+    // Add panel content
+    const panelContent = document.createElement('div');
+    panelContent.style.padding = '10px';
+    
+    // Instructions
+    const instructions = document.createElement('div');
+    instructions.innerHTML = `
+      <p>Click and drag cables between ports to connect equipment.</p>
+      <p style="color: #0078d7; margin-top: 10px;"><strong>Edge Server Connection:</strong></p>
+      <p>Look for the <span style="color: #0078d7; font-weight: bold;">blue tile</span> next to the edge router cabinet. This is where you should connect your server rack cables for external connectivity.</p>
+    `;
+    panelContent.appendChild(instructions);
+    
+    // Cables section
+    const cablesSection = document.createElement('div');
+    cablesSection.style.marginTop = '15px';
+    cablesSection.innerHTML = '<div style="font-weight: bold; margin-bottom: 5px;">Available Cable Types:</div>';
+    
+    // Create cable options
+    const createCableOption = (cableType, displayName, color) => {
+      const option = document.createElement('div');
+      option.className = 'cable-option';
+      option.style.display = 'flex';
+      option.style.alignItems = 'center';
+      option.style.margin = '5px 0';
+      option.style.padding = '5px';
+      option.style.border = '1px solid #808080';
+      option.style.cursor = 'pointer';
+      option.style.backgroundColor = '#f0f0f0';
+      
+      // Add cable color indicator
+      const colorIndicator = document.createElement('div');
+      colorIndicator.style.width = '20px';
+      colorIndicator.style.height = '10px';
+      colorIndicator.style.backgroundColor = `#${color.toString(16).padStart(6, '0')}`;
+      colorIndicator.style.marginRight = '10px';
+      colorIndicator.style.border = '1px solid #808080';
+      option.appendChild(colorIndicator);
+      
+      // Add cable name
+      const name = document.createElement('div');
+      name.textContent = displayName;
+      option.appendChild(name);
+      
+      // Add click event
+      option.addEventListener('click', () => {
+        // Select this cable type
+        this.selectCableType(cableType);
+        
+        // Update UI
+        document.querySelectorAll('.cable-option').forEach(opt => {
+          opt.style.border = '1px solid #808080';
+          opt.style.backgroundColor = '#f0f0f0';
+        });
+        
+        option.style.border = '2px solid #0000a5';
+        option.style.backgroundColor = '#e6e6ff';
+      });
+      
+      return option;
+    };
+    
+    // Get cable types from the networkEquipment.js constants
+    const cableTypesDiv = document.createElement('div');
+    
+    // Add copper cable option
+    const copperOption = createCableOption('COPPER', 'Copper Ethernet (1G)', 0xE0A30B);
+    cableTypesDiv.appendChild(copperOption);
+    
+    // Add fiber multimode cable option
+    const multiModeOption = createCableOption('FIBER_MULTIMODE', 'Multimode Fiber (10G)', 0xF44336);
+    cableTypesDiv.appendChild(multiModeOption);
+    
+    // Add fiber singlemode cable option
+    const singleModeOption = createCableOption('FIBER_SINGLEMODE', 'Singlemode Fiber (40G)', 0xFFEB3B);
+    cableTypesDiv.appendChild(singleModeOption);
+    
+    // Add console cable option
+    const consoleOption = createCableOption('CONSOLE', 'Console Cable', 0x795548);
+    cableTypesDiv.appendChild(consoleOption);
+    
+    cablesSection.appendChild(cableTypesDiv);
+    panelContent.appendChild(cablesSection);
+    
+    // Stats section
+    const statsSection = document.createElement('div');
+    statsSection.style.marginTop = '20px';
+    statsSection.innerHTML = `
+      <div style="font-weight: bold; margin-bottom: 5px;">Network Statistics:</div>
+      <div id="cable-stats" style="font-size: 12px;">
+        <div>Total Cables: <span id="total-cables">0</span></div>
+        <div>Connected Devices: <span id="connected-devices">0</span></div>
+        <div>Total Bandwidth: <span id="total-bandwidth">0 Gbps</span></div>
+      </div>
+    `;
+    panelContent.appendChild(statsSection);
+    
+    // Add button to auto-arrange cables
+    const autoArrangeBtn = document.createElement('button');
+    autoArrangeBtn.textContent = 'Auto-Arrange Cables';
+    autoArrangeBtn.style.marginTop = '15px';
+    autoArrangeBtn.style.padding = '5px 10px';
+    autoArrangeBtn.style.backgroundColor = '#d4d0c8';
+    autoArrangeBtn.style.border = '2px solid #808080';
+    autoArrangeBtn.style.borderLeft = '2px solid #ffffff';
+    autoArrangeBtn.style.borderTop = '2px solid #ffffff';
+    autoArrangeBtn.style.cursor = 'pointer';
+    
+    autoArrangeBtn.addEventListener('click', () => {
+      // Call function to nicely arrange cables
+      this.game.cableManager.updateAllCables();
+    });
+    
+    panelContent.appendChild(autoArrangeBtn);
+    
+    // Add elements to panel
+    this.cablePanel.appendChild(titleBar);
+    this.cablePanel.appendChild(panelContent);
+    
+    // Add panel to UI container
+    document.body.appendChild(this.cablePanel);
+    
+    // Add to draggable panels array
+    this.draggablePanels.push(this.cablePanel);
+    
+    // Default to copper cables
+    this.selectCableType('COPPER');
+  }
+  
+  // Show the cable management panel
+  showCableManagementPanel() {
+    if (this.cablePanel) {
+      this.cablePanel.style.display = 'block';
+      
+      // Update cable statistics
+      this.updateCableStats();
+    }
+  }
+  
+  // Hide the cable management panel
+  hideCableManagementPanel() {
+    if (this.cablePanel) {
+      this.cablePanel.style.display = 'none';
+    }
+  }
+  
+  // Update cable statistics in the panel
+  updateCableStats() {
+    if (this.cablePanel && this.game.cableManager) {
+      const totalCables = this.game.cableManager.cables.length;
+      document.getElementById('total-cables').textContent = totalCables;
+      
+      // Count connected devices
+      const connectedDevices = new Set();
+      this.game.cableManager.cables.forEach(cable => {
+        connectedDevices.add(cable.sourceEquipmentId);
+        connectedDevices.add(cable.targetEquipmentId);
+      });
+      document.getElementById('connected-devices').textContent = connectedDevices.size;
+      
+      // Calculate total bandwidth (simplified estimate)
+      let totalBandwidth = 0;
+      this.game.cableManager.cables.forEach(cable => {
+        // Get bandwidth based on cable type
+        const cableType = cable.cableType;
+        if (cableType === 'COPPER') {
+          totalBandwidth += 1; // 1 Gbps
+        } else if (cableType === 'FIBER_MULTIMODE') {
+          totalBandwidth += 10; // 10 Gbps
+        } else if (cableType === 'FIBER_SINGLEMODE') {
+          totalBandwidth += 40; // 40 Gbps
+        }
+      });
+      document.getElementById('total-bandwidth').textContent = `${totalBandwidth} Gbps`;
+    }
+  }
+  
+  // Select a cable type for new connections
+  selectCableType(cableType) {
+    this.selectedCableType = cableType;
+    
+    // Update cable manager
+    if (this.game.cableManager) {
+      this.game.cableManager.selectedCableType = cableType;
     }
   }
   

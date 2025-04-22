@@ -32,6 +32,15 @@ export class Game {
     this.dragOffset = new THREE.Vector3();
     this.gridHighlights = [];
     
+    // Game time management
+    this.gameTime = {
+      startDate: new Date(2025, 0, 1), // Game starts on January 1, 2025
+      currentDate: new Date(2025, 0, 1),
+      timeScale: 720, // Default: 720 minutes per real second (1 real second = 12 game hours)
+      dayLength: 60, // 60 real seconds = 1 game day at normal speed
+      isPaused: false
+    };
+    
     // Fund update timer variables
     this.fundsUpdateInterval = 30; // Update funds every 30 seconds
     this.accumulatedTime = 0; // Track accumulated time between updates
@@ -69,6 +78,13 @@ export class Game {
     this.initUI();
     this.initEventListeners();
     this.initSaveSystem();
+    
+    // Initialize the game time display
+    if (this.ui) {
+      this.ui.updateDateDisplay(this.gameTime.currentDate);
+      this.gameTime.lastUIUpdate = new Date(this.gameTime.currentDate);
+    }
+    
     this.animate();
   }
   
@@ -98,21 +114,244 @@ export class Game {
   // Method to toggle cable management mode
   toggleCableMode(active) {
     this.cableMode = active;
-    if (!active && this.cableDragging) {
-      // Cancel any active cable dragging when exiting cable mode
-      this.cableManager.cancelCable();
-      this.cableDragging = false;
-      this.draggedCable = null;
-    }
     
-    // Disable controls when in cable mode
-    if (active) {
-      this.controls.enabled = false;
-    } else {
+    // Save the current camera position before entering cable mode
+    if (active && !this.savedCameraState) {
+      this.savedCameraState = {
+        position: this.camera.position.clone(),
+        rotation: this.camera.rotation.clone(),
+        zoom: this.camera.zoom
+      };
+      
+      // Move to top-down view for cable management
+      const cameraHeight = 50;
+      // Transition the camera position smoothly
+      this.moveToTopDownView(cameraHeight);
+      
+      // Dim all servers and equipment for better cable visibility
+      this.dimServersAndEquipment(true);
+      
+      // Disable orbit controls and enable limited top-down movement
+      this.controls.enableRotate = false;
+      this.controls.enablePan = true;
+      this.controls.maxPolarAngle = Math.PI / 6; // Limit angle to near-top-down
+      this.controls.minPolarAngle = 0;
+      this.controls.maxAzimuthAngle = Math.PI / 4;
+      this.controls.minAzimuthAngle = -Math.PI / 4;
       this.controls.enabled = true;
+      
+      // Show cable menu
+      this.ui.showCableManagementPanel();
+    } else if (!active) {
+      // Restore camera position when exiting cable mode
+      if (this.savedCameraState) {
+        // Smoothly return to the previous view
+        this.returnToPreviousView();
+        
+        // Un-dim the servers and equipment
+        this.dimServersAndEquipment(false);
+        
+        // Reset controls
+        this.controls.enableRotate = true;
+        this.controls.maxPolarAngle = Math.PI / 2;
+        this.controls.minPolarAngle = 0;
+        this.controls.maxAzimuthAngle = Infinity;
+        this.controls.minAzimuthAngle = -Infinity;
+        
+        // Clear saved camera state
+        this.savedCameraState = null;
+        
+        // Hide cable menu
+        this.ui.hideCableManagementPanel();
+      }
+      
+      // Cancel any active cable dragging
+      if (this.cableDragging) {
+        this.cableManager.cancelCable();
+        this.cableDragging = false;
+        this.draggedCable = null;
+      }
     }
     
     console.log(`Cable management mode ${active ? 'enabled' : 'disabled'}`);
+  }
+  
+  // Smoothly move camera to top-down view
+  moveToTopDownView(height) {
+    // Calculate center of datacenter
+    const center = new THREE.Vector3(0, 0, 0);
+    
+    // Set up animation
+    const startPosition = this.camera.position.clone();
+    const targetPosition = new THREE.Vector3(0, height, 0);
+    
+    // Store animation data
+    this.cameraTransition = {
+      startPosition: startPosition,
+      targetPosition: targetPosition,
+      startTime: Date.now(),
+      duration: 1000, // 1 second transition
+      center: center,
+      active: true
+    };
+  }
+  
+  // Return to the previous camera view
+  returnToPreviousView() {
+    // Set up animation to return to saved position
+    const startPosition = this.camera.position.clone();
+    const targetPosition = this.savedCameraState.position.clone();
+    
+    // Store animation data
+    this.cameraTransition = {
+      startPosition: startPosition,
+      targetPosition: targetPosition,
+      startRotation: this.camera.rotation.clone(),
+      targetRotation: this.savedCameraState.rotation.clone(),
+      startTime: Date.now(),
+      duration: 1000, // 1 second transition
+      active: true
+    };
+  }
+  
+  // Check if connection tile for edge router exists, create it if not
+  checkAndCreateConnectionTile() {
+    if (this.datacenter && this.datacenter.egressRouter) {
+      if (!this.datacenter.egressRouter.connectionTile) {
+        console.log("Connection tile not found, creating it now");
+        // Create the tile if it doesn't exist yet
+        this.datacenter.egressRouter.createConnectionTile();
+        
+        // Force an update of position
+        const pos = this.datacenter.egressRouter.container.position;
+        if (this.datacenter.egressRouter.connectionTile) {
+          this.datacenter.egressRouter.connectionTile.position.copy(pos);
+          this.datacenter.egressRouter.connectionTile.visible = true;
+          console.log("Created and positioned connection tile at:", pos);
+        }
+      } else {
+        // Make sure it's visible
+        this.datacenter.egressRouter.connectionTile.visible = true;
+      }
+    }
+  }
+  
+  // Dim servers and equipment for better cable visibility
+  dimServersAndEquipment(dim) {
+    // Make sure the connection tile exists and is visible
+    this.checkAndCreateConnectionTile();
+    // Go through all racks
+    for (const rack of this.datacenter.racks) {
+      // Dim servers
+      for (const server of rack.servers) {
+        // Access server meshes and adjust material opacity/emissive
+        if (server.container && server.container.children) {
+          this.setObjectDimming(server.container, dim);
+        }
+      }
+      
+      // Dim network equipment
+      for (const equipment of rack.networkEquipment) {
+        if (equipment.container && equipment.container.children) {
+          // Except don't dim the ports, since we need to see them for cable management
+          this.setObjectDimming(equipment.container, dim, 'port');
+        }
+      }
+      
+      // Dim the rack itself slightly
+      this.setObjectDimming(rack.container, dim, 'port');
+    }
+    
+    // Handle egress router cabinet - dim cabinet but highlight connection tile
+    if (this.datacenter.egressRouter) {
+      // Dim the cabinet
+      this.setObjectDimming(this.datacenter.egressRouter.cabinet, dim);
+      
+      // Enhance the connection tile in cable mode
+      if (this.datacenter.egressRouter.connectionTile) {
+        // Always keep it visible, but enhance it in cable mode
+        if (dim) {
+          // Make connection tile more prominent in cable management mode
+          this.datacenter.egressRouter.connectionTile.traverse(child => {
+            if (child.isMesh && child.material) {
+              // Store original values if not already stored
+              if (!child.userData.originalEmissiveIntensity && child.material.emissive) {
+                child.userData.originalEmissiveIntensity = child.material.emissiveIntensity || 0;
+              }
+              if (!child.userData.originalOpacity) {
+                child.userData.originalOpacity = child.material.opacity || 1.0;
+              }
+              
+              // Enhance visual appearance
+              if (child.material.emissive) {
+                child.material.emissiveIntensity = 1.0; // Max glow
+              }
+              // Make label fully opaque
+              child.material.opacity = 1.0;
+              
+              // Scale up slightly for emphasis
+              if (!child.userData.originalScale) {
+                child.userData.originalScale = child.scale.clone();
+                child.scale.set(1.1, 1.1, 1.1);
+              }
+            }
+          });
+        } else {
+          // Return to normal appearance
+          this.datacenter.egressRouter.connectionTile.traverse(child => {
+            if (child.isMesh && child.material) {
+              // Restore original values
+              if (child.userData.originalEmissiveIntensity !== undefined && child.material.emissive) {
+                child.material.emissiveIntensity = child.userData.originalEmissiveIntensity;
+              }
+              if (child.userData.originalOpacity !== undefined) {
+                child.material.opacity = child.userData.originalOpacity;
+              }
+              if (child.userData.originalScale) {
+                child.scale.copy(child.userData.originalScale);
+                delete child.userData.originalScale;
+              }
+            }
+          });
+        }
+      }
+    }
+  }
+  
+  // Helper function to dim/un-dim an object
+  setObjectDimming(object, dim, excludeType = null) {
+    object.traverse(child => {
+      if (child.isMesh && 
+          (!excludeType || 
+           !child.userData || 
+           child.userData.type !== excludeType)) {
+        
+        if (!child.userData.originalMaterial) {
+          // Store original material properties
+          child.userData.originalMaterial = {
+            opacity: child.material.opacity,
+            transparent: child.material.transparent,
+            emissiveIntensity: child.material.emissiveIntensity || 0
+          };
+        }
+        
+        if (dim) {
+          // Dim the object
+          child.material.transparent = true;
+          child.material.opacity = 0.5;
+          if (child.material.emissiveIntensity !== undefined) {
+            child.material.emissiveIntensity = 0.1;
+          }
+        } else {
+          // Restore original settings
+          child.material.transparent = child.userData.originalMaterial.transparent;
+          child.material.opacity = child.userData.originalMaterial.opacity;
+          if (child.material.emissiveIntensity !== undefined) {
+            child.material.emissiveIntensity = child.userData.originalMaterial.emissiveIntensity;
+          }
+        }
+      }
+    });
   }
   
   // Find equipment across all racks
@@ -998,13 +1237,65 @@ export class Game {
     this.gridHighlights = [];
   }
 
+  // Helper function for smooth animation easing
+  easeInOutQuad(t) {
+    return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  }
+  
   animate() {
     requestAnimationFrame(this.animate.bind(this));
     
+    // Make sure the connection tile is created and visible
+    if (!this.connectionTileChecked) {
+      this.checkAndCreateConnectionTile();
+      this.connectionTileChecked = true;
+    }
+    
     const delta = this.clock.getDelta();
     
+    // Update game time
+    this.updateGameTime();
+    
+    // Handle camera transition animation for cable mode
+    if (this.cameraTransition && this.cameraTransition.active) {
+      const elapsed = Date.now() - this.cameraTransition.startTime;
+      const progress = Math.min(elapsed / this.cameraTransition.duration, 1.0);
+      
+      // Use easing function for smoother transition
+      const easedProgress = this.easeInOutQuad(progress);
+      
+      // Interpolate position
+      this.camera.position.lerpVectors(
+        this.cameraTransition.startPosition,
+        this.cameraTransition.targetPosition,
+        easedProgress
+      );
+      
+      // Interpolate rotation if we have rotation values
+      if (this.cameraTransition.startRotation && this.cameraTransition.targetRotation) {
+        this.camera.quaternion.slerpQuaternions(
+          new THREE.Quaternion().setFromEuler(this.cameraTransition.startRotation),
+          new THREE.Quaternion().setFromEuler(this.cameraTransition.targetRotation),
+          easedProgress
+        );
+      }
+      
+      // Look at center of scene for top-down view
+      if (this.cameraTransition.center) {
+        this.camera.lookAt(this.cameraTransition.center);
+      }
+      
+      // Check if transition is complete
+      if (progress >= 1.0) {
+        this.cameraTransition.active = false;
+      }
+      
+      // Force controls update to sync with our manual changes
+      this.controls.update();
+    }
+    
     // Special handling for rack dragging - completely freeze camera controls
-    if (this.rackDragMode) {
+    else if (this.rackDragMode) {
       // Do not update camera controls during rack dragging
       // This prevents any camera movement or rotation
     } 
@@ -1591,5 +1882,83 @@ export class Game {
     // from server -> switch -> router -> circuit
     // For now, just assume if the server has an IP address, it's properly connected
     return server.ipAddress !== null && server.ipAddress !== undefined;
+  }
+  
+  // Update the game time based on real time and time scale
+  updateGameTime() {
+    if (this.gameTime.isPaused) return;
+    
+    const delta = this.clock.getDelta();
+    const gameMinutesElapsed = delta * this.gameTime.timeScale;
+    
+    // Update the current date
+    const newDate = new Date(this.gameTime.currentDate);
+    newDate.setMinutes(newDate.getMinutes() + gameMinutesElapsed);
+    this.gameTime.currentDate = newDate;
+    
+    // Update UI if date has changed
+    if (this.ui && (newDate.getDate() !== this.gameTime.lastUIUpdate?.getDate() ||
+        newDate.getMonth() !== this.gameTime.lastUIUpdate?.getMonth() ||
+        newDate.getFullYear() !== this.gameTime.lastUIUpdate?.getFullYear() ||
+        !this.gameTime.lastUIUpdate)) {
+      this.ui.updateDateDisplay(this.gameTime.currentDate);
+      this.gameTime.lastUIUpdate = new Date(newDate);
+      
+      // If month changed, generate monthly financial statement
+      if (!this.gameTime.lastMonthProcessed || 
+          newDate.getMonth() !== this.gameTime.lastMonthProcessed.getMonth() ||
+          newDate.getFullYear() !== this.gameTime.lastMonthProcessed.getFullYear()) {
+        this.processMonthEnd();
+        this.gameTime.lastMonthProcessed = new Date(newDate);
+      }
+    }
+  }
+  
+  // Process month-end financial settlement
+  processMonthEnd() {
+    if (!this.datacenter || !this.datacenter.finance) return;
+    
+    const previousMonth = new Date(this.gameTime.currentDate);
+    previousMonth.setDate(0); // Go to the last day of the previous month
+    
+    const monthName = previousMonth.toLocaleString('default', { month: 'long' });
+    const year = previousMonth.getFullYear();
+    
+    console.log(`Processing month-end for ${monthName} ${year}`);
+    
+    // Generate a monthly financial statement
+    const finance = this.datacenter.finance;
+    const statement = finance.generateMonthlyStatement(previousMonth);
+    
+    // Apply financial effects
+    // 1. Charge for monthly expenses
+    this.datacenter.updateFunds(-statement.expenses);
+    
+    // 2. Add monthly revenue
+    this.datacenter.updateFunds(statement.revenue);
+    
+    // 3. Auto-save the game state after month-end processing
+    this.saveGame(0); // Use slot 0 for auto-saves
+    
+    // Show a notification
+    if (this.ui) {
+      this.ui.showStatusMessage(`Financial statement for ${monthName} ${year} generated (Profit: $${statement.profit.toFixed(2)})`, 5000);
+    }
+    
+    return statement;
+  }
+  
+  // Set the game time scale
+  setTimeScale(scale) {
+    this.gameTime.timeScale = scale;
+    console.log(`Game time scale set to ${scale}x`);
+    return this.gameTime.timeScale;
+  }
+  
+  // Pause/unpause the game time
+  togglePauseTime() {
+    this.gameTime.isPaused = !this.gameTime.isPaused;
+    console.log(`Game time ${this.gameTime.isPaused ? 'paused' : 'resumed'}`);
+    return this.gameTime.isPaused;
   }
 }

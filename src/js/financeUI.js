@@ -98,9 +98,51 @@ export class FinanceUI {
     
     const breakdown = financialSummary.breakdownByCategory;
     
+    // Get current date from game time
+    const currentDate = this.game.gameTime?.currentDate || new Date();
+    const formattedDate = currentDate.toLocaleDateString('en-US', { 
+      month: 'long', 
+      year: 'numeric' 
+    });
+    
+    // Prepare financial history data if available
+    let historyHtml = '<p>No financial history available yet.</p>';
+    
+    if (financialSummary.financialHistory && 
+        financialSummary.financialHistory.monthlyStatements && 
+        financialSummary.financialHistory.monthlyStatements.length > 0) {
+      
+      const statements = financialSummary.financialHistory.monthlyStatements;
+      
+      // Create a table of monthly statements
+      historyHtml = `
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr style="background-color: #0078D7; color: white;">
+            <th style="padding: 8px; text-align: left; border: 1px solid #999;">Month</th>
+            <th style="padding: 8px; text-align: right; border: 1px solid #999;">Revenue</th>
+            <th style="padding: 8px; text-align: right; border: 1px solid #999;">Expenses</th>
+            <th style="padding: 8px; text-align: right; border: 1px solid #999;">Profit</th>
+            <th style="padding: 8px; text-align: center; border: 1px solid #999;">Customers</th>
+          </tr>
+          ${statements.slice(-6).reverse().map((statement, index) => `
+            <tr style="background-color: ${index % 2 === 0 ? '#f5f5f5' : 'white'};">
+              <td style="padding: 8px; border: 1px solid #ddd;">${statement.monthYear}</td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">${formatCurrency(statement.revenue)}</td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">${formatCurrency(statement.expenses)}</td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #ddd; 
+                  color: ${statement.profit >= 0 ? 'green' : 'red'};">
+                ${formatCurrency(statement.profit)}
+              </td>
+              <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">${statement.customerCount}</td>
+            </tr>
+          `).join('')}
+        </table>
+      `;
+    }
+    
     tabContent.innerHTML = `
       <div style="padding: 10px 20px;">
-        <h2 style="margin-top: 0; color: #000080;">Financial Summary</h2>
+        <h2 style="margin-top: 0; color: #000080;">Financial Summary - ${formattedDate}</h2>
         
         <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
           <div style="flex: 1; padding: 10px; background-color: #eee; border: 1px solid #999; margin-right: 10px;">
@@ -179,6 +221,11 @@ export class FinanceUI {
               <div><strong>Circuit Capacity:</strong> ${this.game.datacenter.egressRouter?.getTotalBandwidth() || 0} Mbps</div>
             </div>
           </div>
+        </div>
+        
+        <h3 style="color: #000080;">Monthly Financial History</h3>
+        <div style="margin-bottom: 20px;">
+          ${historyHtml}
         </div>
       </div>
     `;

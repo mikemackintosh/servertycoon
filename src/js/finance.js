@@ -10,6 +10,14 @@ export class Finance {
     this.monthlyExpenses = 0;
     this.monthlyProfit = 0;
     
+    // Financial history storage
+    this.financialHistory = {
+      monthlyStatements: [],
+      revenueByMonth: [],
+      expensesByMonth: [],
+      profitByMonth: []
+    };
+    
     // Initialize with some pending customer requests
     this.generateInitialCustomerRequests(3);
     
@@ -409,7 +417,72 @@ export class Finance {
             (total, circuit) => total + circuit.monthlyCost, 0
           ) : 0,
         powerCosts: this.datacenter.powerUsage * 24 * 30 * 0.00012 // $0.12 per kWh
+      },
+      financialHistory: this.financialHistory
+    };
+  }
+  
+  // Generate a monthly financial statement
+  generateMonthlyStatement(date) {
+    const financials = this.updateFinancials();
+    const monthYear = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+    
+    // Create the statement object
+    const statement = {
+      date: new Date(date),
+      monthYear: monthYear,
+      revenue: financials.monthlyRevenue,
+      expenses: financials.monthlyExpenses,
+      profit: financials.monthlyProfit,
+      customerCount: this.customerAgreements.length,
+      bandwidthUtilization: this.calculateTotalBandwidthUtilization(),
+      breakdown: {
+        serverMaintenance: this.datacenter.racks.reduce(
+          (total, rack) => total + rack.servers.reduce(
+            (rackTotal, server) => rackTotal + ((server.originalValue || 500) * 0.02), 0
+          ), 0
+        ),
+        networkMaintenance: this.datacenter.racks.reduce(
+          (total, rack) => total + rack.networkEquipment.reduce(
+            (rackTotal, equipment) => rackTotal + ((equipment.originalValue || 300) * 0.01), 0
+          ), 0
+        ),
+        circuitCosts: this.datacenter.egressRouter ? 
+          this.datacenter.egressRouter.circuits.reduce(
+            (total, circuit) => total + circuit.monthlyCost, 0
+          ) : 0,
+        powerCosts: this.datacenter.powerUsage * 24 * 30 * 0.00012 // $0.12 per kWh
       }
     };
+    
+    // Store in history
+    this.financialHistory.monthlyStatements.push(statement);
+    
+    // Update trend data
+    this.financialHistory.revenueByMonth.push({
+      date: new Date(date),
+      value: financials.monthlyRevenue
+    });
+    
+    this.financialHistory.expensesByMonth.push({
+      date: new Date(date),
+      value: financials.monthlyExpenses
+    });
+    
+    this.financialHistory.profitByMonth.push({
+      date: new Date(date),
+      value: financials.monthlyProfit
+    });
+    
+    // Keep only the last 24 months of data
+    if (this.financialHistory.monthlyStatements.length > 24) {
+      this.financialHistory.monthlyStatements.shift();
+      this.financialHistory.revenueByMonth.shift();
+      this.financialHistory.expensesByMonth.shift();
+      this.financialHistory.profitByMonth.shift();
+    }
+    
+    console.log(`Generated monthly statement for ${monthYear}`);
+    return statement;
   }
 }

@@ -17,6 +17,9 @@ export class CableManager {
     this.cableRadius = 0.02;
     this.cableSegments = 16;
     this.cableTension = 0.5;
+    
+    // Default cable type
+    this.selectedCableType = 'COPPER';
   }
   
   init() {
@@ -42,8 +45,8 @@ export class CableManager {
       false
     );
     
-    // Get color from default cable type
-    const cableColor = CABLE_TYPES.COPPER.color;
+    // Get color from selected cable type
+    const cableColor = CABLE_TYPES[this.selectedCableType].color;
     
     const cableMaterial = new THREE.MeshStandardMaterial({
       color: cableColor,
@@ -102,7 +105,7 @@ export class CableManager {
       this.sourcePort.id,
       targetEquipment,
       targetPortId,
-      'COPPER' // Default to copper
+      this.selectedCableType // Use selected cable type
     );
     
     if (!canConnect) {
@@ -124,7 +127,7 @@ export class CableManager {
       this.sourcePort.id,
       targetEquipment,
       targetPortId,
-      'COPPER'
+      this.selectedCableType
     );
     
     // Reset state
